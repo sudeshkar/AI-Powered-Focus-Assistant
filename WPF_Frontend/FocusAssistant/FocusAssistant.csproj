@@ -14,8 +14,14 @@
     <Folder Include="Resources\" />
     <Folder Include="Styles\" />
     <Folder Include="Trackers\" />
-    <Folder Include="Services\" />
     <Folder Include="ViewModels\" />
+  </ItemGroup>
+
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.7" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="System.Management" Version="9.0.7" />
   </ItemGroup>
 
 </Project>

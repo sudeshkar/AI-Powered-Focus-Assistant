@@ -9,6 +9,11 @@ namespace FocusAssistant
     /// </summary>
     public partial class App : Application
     {
+        protected override void OnExit(ExitEventArgs e)
+        {
+            // Ensure any tracking is stopped when app closes
+            base.OnExit(e);
+        }
     }
 
 }

@@ -28,14 +28,8 @@ namespace FocusAssistant
 
         private void ShowTracking(object sender, RoutedEventArgs e)
         {
-            MainContentFrame.Content = new TextBlock
-            {
-                Text = "⏱️ Time Tracking View\n\nComing soon...",
-                FontSize = 24,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                TextAlignment = TextAlignment.Center
-            };
+            MainContentFrame.Content = new Views.TrackingView();
+             
         }
 
         private void ShowGamification(object sender, RoutedEventArgs e)
