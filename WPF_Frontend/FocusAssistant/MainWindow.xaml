@@ -85,6 +85,12 @@
                         <TextBlock Text="Time Tracking"/>
                     </StackPanel>
                 </Button>
+                <Button Style="{StaticResource SidebarButtonStyle}" Click="ShowAnalytics">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="📊" FontSize="16" Margin="0,0,10,0"/>
+                        <TextBlock Text="Analytics"/>
+                    </StackPanel>
+                </Button>
 
                 <Button Style="{StaticResource SidebarButtonStyle}" Click="ShowGamification">
                     <StackPanel Orientation="Horizontal">

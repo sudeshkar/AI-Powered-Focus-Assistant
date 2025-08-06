@@ -31,6 +31,10 @@ namespace FocusAssistant
             MainContentFrame.Content = new Views.TrackingView();
              
         }
+        private void ShowAnalytics(object sender, RoutedEventArgs e)
+        {
+            MainContentFrame.Content = new Views.AnalyticsView();
+        }
 
         private void ShowGamification(object sender, RoutedEventArgs e)
         {
