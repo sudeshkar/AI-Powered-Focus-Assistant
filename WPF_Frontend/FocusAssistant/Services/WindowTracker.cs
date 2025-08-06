@@ -11,10 +11,20 @@ using System.Threading.Tasks;
 namespace FocusAssistant.Services
 {
     public class WindowTracker
+
     {
         // Windows API imports
         [DllImport("user32.dll")]
         private static extern IntPtr GetForegroundWindow();
+        private IdleTimeDetector _idleDetector;
+        private SessionManager _sessionManager;
+        public WindowTracker(LoggingService loggingService, IdleTimeDetector idleDetector, SessionManager sessionManager)
+        {
+            _loggingService = loggingService;
+            _idleDetector = idleDetector;
+            _sessionManager = sessionManager;
+            _sessionLogs = new List<AppUsage>();
+        }
 
         [DllImport("user32.dll")]
         private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
@@ -50,10 +60,16 @@ namespace FocusAssistant.Services
             _isTracking = true;
             _sessionLogs.Clear();
 
+            // Start idle detection
+            _idleDetector.StartMonitoring();
+
+            // Start work session
+            _sessionManager.StartSession();
+
             // Track every 2 seconds
             _trackingTimer = new Timer(TrackCurrentWindow, null, TimeSpan.Zero, TimeSpan.FromSeconds(2));
 
-            Console.WriteLine("🔍 Window tracking started...");
+            Console.WriteLine("🔍 Window tracking started with idle detection...");
         }
 
         public void StopTracking()
@@ -63,13 +79,20 @@ namespace FocusAssistant.Services
             _isTracking = false;
             _trackingTimer?.Dispose();
 
+            // Stop idle detection
+            _idleDetector.StopMonitoring();
+
             // Finalize current app usage
             if (_currentAppUsage != null)
             {
                 _currentAppUsage.EndTime = DateTime.Now;
                 _currentAppUsage.Duration = _currentAppUsage.EndTime - _currentAppUsage.StartTime;
                 _sessionLogs.Add(_currentAppUsage);
+                _sessionManager.AddAppUsage(_currentAppUsage);
             }
+
+            // End work session
+            _sessionManager.EndSession();
 
             // Save session data
             _loggingService.SaveSession(_sessionLogs);
@@ -82,6 +105,10 @@ namespace FocusAssistant.Services
         {
             try
             {
+                // Skip tracking if user is idle
+                if (_idleDetector.IsIdle)
+                    return;
+
                 var (appName, windowTitle) = GetActiveWindowInfo();
 
                 if (string.IsNullOrEmpty(appName)) return;
@@ -101,6 +128,7 @@ namespace FocusAssistant.Services
                         if (_currentAppUsage.Duration.TotalSeconds >= 3)
                         {
                             _sessionLogs.Add(_currentAppUsage);
+                            _sessionManager.AddAppUsage(_currentAppUsage);
                             AppSwitched?.Invoke(this, _currentAppUsage);
                         }
                     }

@@ -21,6 +21,8 @@ namespace FocusAssistant.Views
     /// <summary>
     /// Interaction logic for TrackingView.xaml
     /// </summary>
+    /// 
+
     public partial class TrackingView : UserControl
     {
         private WindowTracker _windowTracker;
@@ -28,6 +30,8 @@ namespace FocusAssistant.Views
         private DispatcherTimer _updateTimer;
         private ObservableCollection<ActivityLogItem> _activityLog;
         private DateTime _sessionStartTime;
+        private IdleTimeDetector _idleDetector;
+        private SessionManager _sessionManager;
 
         public TrackingView()
         {
@@ -39,16 +43,117 @@ namespace FocusAssistant.Views
         private void InitializeServices()
         {
             _loggingService = new LoggingService();
-            _windowTracker = new WindowTracker(_loggingService);
+            _idleDetector = new IdleTimeDetector(300); // 5 minutes
+            _sessionManager = new SessionManager(_loggingService, _idleDetector);
+            _windowTracker = new WindowTracker(_loggingService, _idleDetector, _sessionManager);
 
             // Subscribe to events
             _windowTracker.AppSwitched += OnAppSwitched;
             _windowTracker.SessionCompleted += OnSessionCompleted;
+            _idleDetector.IdleStateChanged += OnIdleStateChanged;
+            _idleDetector.IdleTimeUpdated += OnIdleTimeUpdated;
+            _sessionManager.SessionUpdated += OnSessionUpdated;
 
             // Timer to update current activity duration
             _updateTimer = new DispatcherTimer();
             _updateTimer.Interval = TimeSpan.FromSeconds(1);
             _updateTimer.Tick += UpdateCurrentActivity;
+        }
+        private void OnIdleStateChanged(object sender, IdleStateChangedEventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (e.IsIdle)
+                {
+                    IdleStatusBorder.Background = System.Windows.Media.Brushes.Orange;
+                    IdleStatusText.Text = "😴 Idle";
+                }
+                else
+                {
+                    IdleStatusBorder.Background = System.Windows.Media.Brushes.Green;
+                    IdleStatusText.Text = "🟢 Active";
+                }
+
+                // Save idle event
+                _loggingService.SaveIdleLog(e);
+            });
+        }
+
+        private void OnIdleTimeUpdated(object sender, TimeSpan idleTime)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                CurrentIdleTimeText.Text = FormatDuration(idleTime);
+            });
+        }
+
+        private void OnSessionUpdated(object sender, WorkSession session)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                UpdateEnhancedSessionStats(session);
+            });
+        }
+
+        private void UpdateEnhancedSessionStats(WorkSession session)
+        {
+            if (session == null) return;
+
+            ProductivityScoreText.Text = $"{session.ProductivityScore:F0}%";
+            TotalBreakTimeText.Text = FormatDuration(session.BreakTime);
+            SessionLengthText.Text = FormatDuration(DateTime.Now - session.StartTime);
+
+            // Update focus ratio
+            var totalActiveTime = session.ProductiveTime + session.DistractedTime;
+            if (totalActiveTime.TotalMinutes > 0)
+            {
+                var focusMinutes = (int)session.ProductiveTime.TotalMinutes;
+                var distractedMinutes = (int)session.DistractedTime.TotalMinutes;
+                FocusRatioText.Text = $"{focusMinutes}:{distractedMinutes}";
+            }
+            else
+            {
+                FocusRatioText.Text = "0:0";
+            }
+        }
+
+        private void ExportData(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var sessions = _loggingService.LoadWorkSessions(30); // Last 30 days
+                if (!sessions.Any())
+                {
+                    MessageBox.Show("No session data available to export.",
+                                  "Export Data",
+                                  MessageBoxButton.OK,
+                                  MessageBoxImage.Information);
+                    return;
+                }
+
+                var saveDialog = new Microsoft.Win32.SaveFileDialog
+                {
+                    Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*",
+                    DefaultExt = "csv",
+                    FileName = $"focus_assistant_data_{DateTime.Now:yyyy-MM-dd}.csv"
+                };
+
+                if (saveDialog.ShowDialog() == true)
+                {
+                    _loggingService.ExportToCsv(sessions, saveDialog.FileName);
+                    MessageBox.Show($"Data exported successfully!\n\nFile: {saveDialog.FileName}\nSessions: {sessions.Count}",
+                                  "Export Complete",
+                                  MessageBoxButton.OK,
+                                  MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error exporting data: {ex.Message}",
+                              "Export Error",
+                              MessageBoxButton.OK,
+                              MessageBoxImage.Error);
+            }
         }
 
         private void InitializeUI()
@@ -79,7 +184,16 @@ namespace FocusAssistant.Views
 
             TrackingButton.Content = "⏹️ Stop Tracking";
             TrackingButton.Background = System.Windows.Media.Brushes.Green;
-            StatusText.Text = "Actively tracking your application usage...";
+            StatusText.Text = "Actively tracking your application usage and idle time...";
+
+            // Reset UI elements
+            IdleStatusBorder.Background = System.Windows.Media.Brushes.Green;
+            IdleStatusText.Text = "🟢 Active";
+            CurrentIdleTimeText.Text = "00:00";
+            TotalBreakTimeText.Text = "00:00";
+            ProductivityScoreText.Text = "0%";
+            FocusRatioText.Text = "0:0";
+            SessionLengthText.Text = "00:00:00";
 
             UpdateSessionSummary();
         }
@@ -91,13 +205,16 @@ namespace FocusAssistant.Views
 
             TrackingButton.Content = "🔴 Start Tracking";
             TrackingButton.Background = System.Windows.Media.Brushes.Red;
-            StatusText.Text = "Tracking stopped. Session data saved.";
+            StatusText.Text = "Tracking stopped. Session data saved with idle time analysis.";
 
             CurrentAppText.Text = "Not tracking";
             CurrentWindowText.Text = "N/A";
             CurrentDurationText.Text = "00:00:00";
             ProductivityIcon.Text = "⚪";
             ProductivityText.Text = "Idle";
+
+            IdleStatusBorder.Background = System.Windows.Media.Brushes.Gray;
+            IdleStatusText.Text = "⚪ Stopped";
         }
 
         private void OnAppSwitched(object sender, AppUsage appUsage)
