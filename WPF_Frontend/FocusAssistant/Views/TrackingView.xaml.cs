@@ -32,6 +32,9 @@ namespace FocusAssistant.Views
         private DateTime _sessionStartTime;
         private IdleTimeDetector _idleDetector;
         private SessionManager _sessionManager;
+        private DispatcherTimer _bannerTimer;
+        private string _currentInterventionId;
+        private readonly FlaskIntegrationService _flask = new();
 
         public TrackingView()
         {
@@ -156,6 +159,19 @@ namespace FocusAssistant.Views
             }
         }
 
+        private void AiYes_Click(object sender, RoutedEventArgs e) => SendFeedback(true, "acted");
+        private void AiNo_Click(object sender, RoutedEventArgs e) => SendFeedback(false, "ignored");
+        private void AiIgnore_Click(object sender, RoutedEventArgs e) => SendFeedback(false, "dismissed");
+
+        private async void SendFeedback(bool helpful, string action)
+        {
+            if (string.IsNullOrEmpty(_currentInterventionId)) return;
+
+            await _flask.SendFeedbackAsync(helpful, action, interventionId: _currentInterventionId);
+            AiBanner.Visibility = Visibility.Collapsed;
+            _bannerTimer?.Stop();
+        }
+
         private void InitializeUI()
         {
             _activityLog = new ObservableCollection<ActivityLogItem>();
@@ -217,34 +233,48 @@ namespace FocusAssistant.Views
             IdleStatusText.Text = "⚪ Stopped";
         }
 
-        private void OnAppSwitched(object sender, AppUsage appUsage)
+        private void OnAppSwitched(object sender, AppUsage usage)
         {
-            // Update UI on main thread
-            Dispatcher.Invoke(() =>
+            Dispatcher.Invoke(async () =>
             {
-                var logItem = new ActivityLogItem
-                {
-                    AppName = appUsage.AppName,
-                    WindowTitle = appUsage.WindowTitle,
-                    Duration = appUsage.Duration,
-                    DurationText = FormatDuration(appUsage.Duration),
-                    TimeText = appUsage.StartTime.ToString("HH:mm:ss"),
-                    IsProductive = appUsage.IsProductive,
-                    ProductivityIcon = appUsage.IsProductive ? "🟢" : "🔴"
-                };
+                // 1. Send activity to AI
+                var resp = await _flask.SendActivityAsync(usage);
 
-                _activityLog.Insert(0, logItem);
-
-                // Keep only last 20 items in UI
-                while (_activityLog.Count > 20)
+                // 2. Show banner only if we got a message
+                if (!string.IsNullOrEmpty(resp.InterventionMessage) &&
+                    resp.InterventionId != _currentInterventionId)
                 {
-                    _activityLog.RemoveAt(_activityLog.Count - 1);
+                    _currentInterventionId = resp.InterventionId;
+                    AiMessageText.Text = resp.InterventionMessage;
+                    AiBanner.Visibility = Visibility.Visible;
+
+                    // restart 10-second clock
+                    _bannerTimer?.Stop();
+                    _bannerTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
+                    _bannerTimer.Tick += (_, _) =>
+                    {
+                        AiBanner.Visibility = Visibility.Collapsed;
+                        _bannerTimer.Stop();
+                    };
+                    _bannerTimer.Start();
                 }
 
-                UpdateSessionSummary();
+                // 3. Log in list (existing code)
+                var logItem = new ActivityLogItem
+                {
+                    AppName = usage.AppName,
+                    WindowTitle = usage.WindowTitle,
+                    Duration = usage.Duration,
+                    DurationText = FormatDuration(usage.Duration),
+                    TimeText = usage.StartTime.ToString("HH:mm:ss"),
+                    IsProductive = usage.IsProductive,
+                    ProductivityIcon = usage.IsProductive ? "🟢" : "🔴"
+                };
+                _activityLog.Insert(0, logItem);
+                while (_activityLog.Count > 20) _activityLog.RemoveAt(_activityLog.Count - 1);
 
-                // Save real-time log
-                _loggingService.SaveRealTimeLog(appUsage);
+                UpdateSessionSummary();
+                _loggingService.SaveRealTimeLog(usage);
             });
         }
 

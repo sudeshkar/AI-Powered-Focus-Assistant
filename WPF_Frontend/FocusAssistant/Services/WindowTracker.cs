@@ -1,4 +1,5 @@
 ﻿using FocusAssistant.Models;
+using Microsoft.Toolkit.Uwp.Notifications;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -11,13 +12,13 @@ using System.Threading.Tasks;
 namespace FocusAssistant.Services
 {
     public class WindowTracker
-
     {
         // Windows API imports
         [DllImport("user32.dll")]
         private static extern IntPtr GetForegroundWindow();
         private IdleTimeDetector _idleDetector;
         private SessionManager _sessionManager;
+        private readonly FlaskIntegrationService _flask = new();
         public WindowTracker(LoggingService loggingService, IdleTimeDetector idleDetector, SessionManager sessionManager)
         {
             _loggingService = loggingService;
@@ -53,6 +54,34 @@ namespace FocusAssistant.Services
             _sessionLogs = new List<AppUsage>();
         }
 
+        private async void NotifyAiAsync(AppUsage usage)
+        {
+            try
+            {
+                var resp = await _flask.SendActivityAsync(usage);
+
+                if (!string.IsNullOrEmpty(resp.InterventionMessage))
+                {
+                    new ToastContentBuilder()
+                    .AddText("Focus Assistant")
+                    .AddText(resp.InterventionMessage)
+                    .Show();
+
+                    Console.Write("Was this helpful? [y/n] ");
+                    var key = Console.ReadKey().Key;
+                    await _flask.SendFeedbackAsync(
+                            helpful: key == ConsoleKey.Y,
+                            action: key == ConsoleKey.Y ? "acted" : "ignored",
+                            interventionId: resp.InterventionId);
+                    Console.WriteLine();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ AI call failed: {ex.Message}");
+            }
+        }
+
         public void StartTracking()
         {
             if (_isTracking) return;
@@ -67,7 +96,7 @@ namespace FocusAssistant.Services
             _sessionManager.StartSession();
 
             // Track every 2 seconds
-            _trackingTimer = new Timer(TrackCurrentWindow, null, TimeSpan.Zero, TimeSpan.FromSeconds(2));
+            _trackingTimer = new Timer(TrackCurrentWindow, null, TimeSpan.Zero, TimeSpan.FromSeconds(30));
 
             Console.WriteLine("🔍 Window tracking started with idle detection...");
         }
@@ -130,6 +159,8 @@ namespace FocusAssistant.Services
                             _sessionLogs.Add(_currentAppUsage);
                             _sessionManager.AddAppUsage(_currentAppUsage);
                             AppSwitched?.Invoke(this, _currentAppUsage);
+                            if (_currentAppUsage.Duration.TotalSeconds >= 10)
+                                NotifyAiAsync(_currentAppUsage);
                         }
                     }
 

@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <UserControl.Resources>
+        <!-- ✅ Re-usable Card Style -->
         <Style x:Key="StatusCardStyle" TargetType="Border">
             <Setter Property="Background" Value="White"/>
             <Setter Property="CornerRadius" Value="12"/>
@@ -14,43 +15,123 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- ✅ Rounded Button Style -->
+        <Style x:Key="RoundedButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#10B981"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                            CornerRadius="6"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel>
-            <!-- Status Header -->
-            <Border Style="{StaticResource StatusCardStyle}" Margin="10,20,10,10">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
 
-                    <StackPanel Grid.Column="0">
-                        <TextBlock Text="📊 Real-Time Activity Tracking" 
-                                 FontSize="20" 
-                                 FontWeight="Bold" 
-                                 Foreground="#1E40AF"/>
-                        <TextBlock Name="StatusText" 
-                                 Text="Click 'Start Tracking' to begin monitoring your activity" 
-                                 FontSize="14" 
-                                 Foreground="#6B7280"
-                                 Margin="0,5,0,0"/>
-                    </StackPanel>
+    <!-- ROOT GRID: AI banner floats above ScrollViewer -->
+    <Grid>
+        <!-- 🎈 Modern Toast Popup -->
+        <Border x:Name="AiBanner"
+        Panel.ZIndex="1000"
+        Visibility="Collapsed"
+        Background="#1E40AF"
+        CornerRadius="12"
+        Padding="20"
+        Margin="20"
+        HorizontalAlignment="Right"
+        VerticalAlignment="Top"
+        Width="320">
+            <Border.Effect>
+                <DropShadowEffect Color="Black" Direction="270" ShadowDepth="4" Opacity="0.5" BlurRadius="8"/>
+            </Border.Effect>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-                    <Border Grid.Column="1" CornerRadius="8" Background="#EF4444">
-                        <Button Name="TrackingButton"
-                            Content="🔴 Start Tracking"
-                            Background="Transparent"
-                            Foreground="White"
-                            Padding="20,10"
-                            BorderThickness="0"
-                            FontWeight="Medium"
-                            Click="ToggleTracking"/>            
-                    </Border>
+                <!-- Header -->
+                <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,8">
+                    <TextBlock Text="🤖" FontSize="20"/>
+                    <TextBlock Text="AI Focus Reminder" 
+                           Foreground="White" 
+                           FontSize="14" 
+                           FontWeight="SemiBold"
+                           Margin="6,0,0,0"/>
+                </StackPanel>
 
-                </Grid>
-            </Border>
+                <!-- Message -->
+                <TextBlock x:Name="AiMessageText"
+                       Grid.Row="1"
+                       Foreground="White"
+                       FontSize="14"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,12"/>
+
+                <!-- Buttons -->
+                <StackPanel Orientation="Horizontal" Grid.Row="2" HorizontalAlignment="Right">
+                    <Button Content="✅ Yes"
+                    Style="{StaticResource RoundedButtonStyle}"
+                    Click="AiYes_Click"
+                    Margin="0,0,6,0"/>
+                            <Button Content="❌ No"
+                    Style="{StaticResource RoundedButtonStyle}"
+                    Background="#EF4444"
+                    Click="AiNo_Click"
+                    Margin="0,0,6,0"/>
+                        <Button Content="🙈"
+                    ToolTip="Ignore"
+                    Style="{StaticResource RoundedButtonStyle}"
+                    Background="#6B7280"
+                    Click="AiIgnore_Click"/>    
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ScrollViewer with all your original content -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <!--  *** everything you already had ***  -->
+            <!--  (Status, Current Activity, Session Summary, Idle Time, etc.)  -->
+            <StackPanel>
+                <!-- Status Header -->
+                <Border Style="{StaticResource StatusCardStyle}" Margin="10,20,10,10">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="📊 Real-Time Activity Tracking" 
+                                       FontSize="20" FontWeight="Bold" Foreground="#1E40AF"/>
+                            <TextBlock Name="StatusText" 
+                                       Text="Click 'Start Tracking' to begin monitoring your activity" 
+                                       FontSize="14" Foreground="#6B7280" Margin="0,5,0,0"/>
+                        </StackPanel>
+                        <Border Grid.Column="1" CornerRadius="8" Background="#EF4444">
+                            <Button Name="TrackingButton"
+                                    Content="🔴 Start Tracking"
+                                    Background="Transparent" Foreground="White"
+                                    Padding="20,10" BorderThickness="0"
+                                    Click="ToggleTracking"/>
+                        </Border>
+                    </Grid>
+                </Border>
 
             <!-- Current Activity -->
             <Border Style="{StaticResource StatusCardStyle}">
@@ -246,16 +327,16 @@
                      FontSize="16" 
                      FontWeight="SemiBold"/>
 
-                        <Button Grid.Column="1"
-        Name="ExportButton"
-        Content="📤 Export CSV"
-        Background="#3B82F6"
-        Foreground="White"
-        Padding="12,6"
-        BorderThickness="0"
-        FontSize="12"
-        Click="ExportData">
-                            <Button.Style>
+             <Button Grid.Column="1"
+            Name="ExportButton"
+            Content="📤 Export CSV"
+            Background="#3B82F6"
+            Foreground="White"
+            Padding="12,6"
+            BorderThickness="0"
+            FontSize="12"
+            Click="ExportData">
+                                <Button.Style>
                                 <Style TargetType="Button">
                                     <Setter Property="Template">
                                         <Setter.Value>
@@ -378,4 +459,5 @@
             </Border>
         </StackPanel>
     </ScrollViewer>
+    </Grid>
 </UserControl>
