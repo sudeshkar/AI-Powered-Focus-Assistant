@@ -1,4 +1,4 @@
-﻿<Window x:Class="FocusAssistant.MainWindow"
+<Window x:Class="FocusAssistant.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -142,8 +142,8 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal">
-                        <Button Content="🔴 Start Tracking"
-            Background="#EF4444"
+                        <Button Content="Open Tracking"
+            Background="#4F46E5"
             Foreground="White"
             Padding="15,8"
             BorderThickness="0"

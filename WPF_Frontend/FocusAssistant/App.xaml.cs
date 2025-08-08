@@ -1,4 +1,4 @@
-﻿using FocusAssistant.Services;
+using FocusAssistant.Services;
 using System.Configuration;
 using System.Data;
 using System.Windows;
@@ -10,17 +10,29 @@ namespace FocusAssistant
     /// </summary>
     public partial class App : Application
     {
+        protected override async void OnStartup(StartupEventArgs e)
+        {
+            base.OnStartup(e);
+            _ = EnsureBackendAsync(); // fire-and-forget on UI thread startup
+        }
+
         protected override void OnExit(ExitEventArgs e)
         {
-            // Ensure any tracking is stopped when app closes
             base.OnExit(e);
         }
-        private async void CheckAIHealth()
+
+        private async Task EnsureBackendAsync()
         {
-            var svc = new FlaskIntegrationService();
-            bool ok = await svc.StartFlaskServerAsync();
-            var pong = await svc.GetAnalyticsAsync();
-            MessageBox.Show(ok && pong != null ? "✅ AI online" : "❌ AI unreachable");
+            try
+            {
+                var svc = new FlaskIntegrationService();
+                bool ok = await svc.StartFlaskServerAsync();
+                if (ok)
+                {
+                    await svc.GetAnalyticsAsync();
+                }
+            }
+            catch { }
         }
     }
 

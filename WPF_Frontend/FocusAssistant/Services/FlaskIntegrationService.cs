@@ -1,4 +1,4 @@
-﻿using FocusAssistant.Models;
+using FocusAssistant.Models;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -20,9 +20,9 @@ namespace FocusAssistant.Services
         
 
 
-        public FlaskIntegrationService(string apiUrl = "http://127.0.0.1:5000")
+        public FlaskIntegrationService(string apiUrl = null)
         {
-            _flaskApiUrl = apiUrl;
+            _flaskApiUrl = string.IsNullOrWhiteSpace(apiUrl) ? (Environment.GetEnvironmentVariable("FOCUS_API_URL") ?? "http://127.0.0.1:5000") : apiUrl;
             _httpClient = new HttpClient
             {
                 Timeout = TimeSpan.FromSeconds(10)
@@ -43,7 +43,10 @@ namespace FocusAssistant.Services
 
                 // Start Flask process
                 var pythonPath = FindPythonExecutable();
-                var scriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Python_Backend", "app.py");
+                var configuredPath = Environment.GetEnvironmentVariable("FOCUS_BACKEND_PATH");
+                var baseDirPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Python_Backend", "app.py");
+                var repoRelativePath = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "Python_Backend", "app.py"));
+                var scriptPath = !string.IsNullOrWhiteSpace(configuredPath) ? configuredPath : (File.Exists(baseDirPath) ? baseDirPath : repoRelativePath);
 
                 if (!File.Exists(scriptPath))
                 {

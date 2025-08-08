@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -74,19 +74,8 @@ namespace FocusAssistant
 
         private void ToggleTracking(object sender, RoutedEventArgs e)
         {
-            isTracking = !isTracking;
-            if (isTracking)
-            {
-                StartTrackingButton.Content = "⏹️ Stop Tracking";
-                StartTrackingButton.Background = System.Windows.Media.Brushes.Green;
-                // TODO: Start tracking logic
-            }
-            else
-            {
-                StartTrackingButton.Content = "🔴 Start Tracking";
-                StartTrackingButton.Background = System.Windows.Media.Brushes.Red;
-                // TODO: Stop tracking logic
-            }
+            // Navigate to Tracking view and delegate controls there
+            ShowTracking(sender, e);
         }
     }
 }
