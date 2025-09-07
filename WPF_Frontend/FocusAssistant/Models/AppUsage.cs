@@ -14,6 +14,12 @@ namespace FocusAssistant.Models
         public DateTime EndTime { get; set; }
         public TimeSpan Duration { get; set; }
         public bool IsProductive { get; set; }
+
+        public AppUsage()
+        {
+            StartTime = DateTime.Now;
+        }
     }
+
 
 }

@@ -8,6 +8,7 @@ namespace FocusAssistant.Models
 {
     public class UserSession
     {
+ 
         public string SessionId { get; set; }
         public DateTime StartTime { get; set; }
         public DateTime EndTime { get; set; }

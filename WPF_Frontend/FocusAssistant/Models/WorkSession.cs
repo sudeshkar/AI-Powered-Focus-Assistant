@@ -64,6 +64,7 @@ namespace FocusAssistant.Models
         public TimeSpan TotalProductiveTime { get; set; }
         public TimeSpan TotalBreakTime { get; set; }
         public TimeSpan AverageSessionLength { get; set; }
+        public TimeSpan TotalDistractedTime { get; set; }
         public double ProductivityScore { get; set; }
         public int TotalAppSwitches { get; set; }
     }
