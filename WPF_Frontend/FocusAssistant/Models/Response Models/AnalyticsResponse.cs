@@ -20,9 +20,11 @@ namespace FocusAssistant.Models.Response_Models
         public int RecentInterventions { get; set; }
 
         [JsonPropertyName("top_apps")]
-        public Dictionary<string, int> TopApps { get; set; }
+        public List<string> TopApps { get; set; }
 
         [JsonPropertyName("total_activities")]
         public int TotalActivities { get; set; }
+
+        public int productivityStreaks { get; set; }
     }
 }

@@ -1,4 +1,5 @@
 ﻿using FocusAssistant.Models;
+using FocusAssistant.Models.Response_Models;
 using System;
 using System.Threading.Tasks;
 
@@ -6,6 +7,8 @@ namespace FocusAssistant.Services.Session.Interfaces
 {
     public interface IReportGenerator
     {
-        Task<DailyReport> GenerateReportAsync(DateTime date);
+        Task<AnalyticsResponse> GenerateReportInternal();
+        Task<AnalyticsResponse> GetReportFlask();
+
     }
 }

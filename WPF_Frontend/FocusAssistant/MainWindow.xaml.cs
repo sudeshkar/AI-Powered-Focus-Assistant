@@ -91,7 +91,7 @@ namespace FocusAssistant
                     {
                         Dispatcher.Invoke(() =>
                         {
-                            _trackingViewInstance?.ShowAiIntervention(response);
+                            _trackingViewInstance?.AiInterventionReceived(response);
                         });
                     };
                 }

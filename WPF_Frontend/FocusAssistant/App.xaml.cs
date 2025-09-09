@@ -11,6 +11,7 @@ using FocusAssistant.Services.ML;
 using FocusAssistant.Services.Session;
 using FocusAssistant.ViewModels;
 using FocusAssistant.Views;
+using FocusAssistant.Data;
 
 namespace FocusAssistant
 {
@@ -27,6 +28,8 @@ namespace FocusAssistant
                 Console.WriteLine($"Starting application at {DateTime.Now:HH:mm:ss.fff}");
                 _host = CreateHostBuilder().Build();
                 Services = _host.Services;
+                using var db = new FocusAssistantDbContext();
+                db.Database.EnsureCreated();  
                 Console.WriteLine($"Services initialized at {DateTime.Now:HH:mm:ss.fff}");
 
                 await _host.StartAsync();

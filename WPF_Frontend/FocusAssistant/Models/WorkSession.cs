@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -8,7 +10,12 @@ namespace FocusAssistant.Models
 {
     public class WorkSession
     {
+        [Key]
+        public string wID { get; set; } = Guid.NewGuid().ToString();
+
         public string SessionId { get; set; }
+        [ForeignKey("SessionId")]
+        public UserSession UserSession { get; set; }
         public DateTime StartTime { get; set; }
         public DateTime EndTime { get; set; }
         public TimeSpan Duration { get; set; }
@@ -17,8 +24,10 @@ namespace FocusAssistant.Models
         public TimeSpan BreakTime { get; set; }
         public double ProductivityScore { get; set; }
         public int AppSwitches { get; set; }
-        public List<AppUsage> AppUsages { get; set; }
-        public List<string> TopApps { get; set; }
+        public List<AppUsage> AppUsages { get; set; } = new List<AppUsage>();
+        public List<string> TopApps { get; set; } = new List<string>();
+        public List<RLInteraction> RLInteractions { get; set; } = new List<RLInteraction>();
+
 
         public WorkSession()
         {

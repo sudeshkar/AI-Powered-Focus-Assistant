@@ -11,8 +11,10 @@
 
 
   <ItemGroup>
+    <Folder Include="Converters\" />
     <Folder Include="Gamification\" />
     <Folder Include="Resources\" />
+    <Folder Include="Services\DTO\" />
     <Folder Include="Styles\" />
     <Folder Include="Trackers\" />
   </ItemGroup>
@@ -22,6 +24,11 @@
 	  <PackageReference Include="AWSSDK.DynamoDBv2" Version="4.0.5.1" />
 	  <PackageReference Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.0.0-rc5.4" />
     <PackageReference Include="MailChimp.Net.V3" Version="5.7.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.8" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.8">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.8" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.8" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.7" />

@@ -1,6 +1,18 @@
-﻿using System.Collections.ObjectModel;
+﻿using FocusAssistant.Models;
+using FocusAssistant.Models.Response_Models;
+using FocusAssistant.Services.Application_Monitoring;
+using FocusAssistant.Services.Flask.Interfaces;
+using FocusAssistant.Services.Interfaces;
+using FocusAssistant.Services.Models.Events;
+using FocusAssistant.Services.Session.Interfaces;
+using OpenTK.Platform;
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
+using System.Windows.Input;
 
 namespace FocusAssistant.ViewModels
 {
@@ -8,23 +20,55 @@ namespace FocusAssistant.ViewModels
     {
         private bool _isTracking;
         private string _statusText;
-        private string _recentInterventionMessage;
-        private string _currentApp;
-        private string _currentWindow;
-        private string _currentDuration;
         private string _productivityRate;
-        private string _totalActivities;
         private string _recentInterventions;
         private string _productivityScore;
-        private string _productiveTime;
-        private string _distractedTime;
-        private string _mostProductiveHour;
-        private string _leastProductiveHour;
-        private string _productivityStreak;
-        private string _userEngagementTrend;
-        private string _actionEffectiveness;
-        private ObservableCollection<ActivityLogItem> _activityLog = new ObservableCollection<ActivityLogItem>();
+        private string _aiStatus;
+        private string _date;
+        private List<string> _topApps;
+        private string _totalActivities;
+        private string _currentApp;
+        private string _currentWindow;
+        private string _windowStatusText;
 
+        private readonly IAnalyticsService _analyticsService;
+        private readonly IReportGenerator _reportGenerator;
+        private readonly ISessionManager _sessionManager;
+        private readonly WindowTracker _windowTracker;
+
+        public TrackingViewModel(
+            WindowTracker windowTracker,
+            IAnalyticsService analyticsService,
+            IReportGenerator reportGenerator,
+            ISessionManager sessionManager)
+        {
+            _windowTracker = windowTracker;
+            _analyticsService = analyticsService;
+            _reportGenerator = reportGenerator;
+            _sessionManager = sessionManager;
+
+            // Initialize collections
+            ActivityLog = new ObservableCollection<ActivityLogItem>();
+
+            // Initialize commands
+            StartTrackingCommand = new AsyncRelayCommand(StartTrackingAsync);
+            StopTrackingCommand = new AsyncRelayCommand(StopTrackingAsync);
+
+            // Initialize default values
+            StatusText = "Ready to track";
+            ProductivityScore = "0.0%";
+            RecentInterventions = "0h";
+            AIStatus = "Ready";
+            TotalActivities = "0";
+            CurrentApp = "No application detected";
+            CurrentWindow = "No window detected";
+
+            // Subscribe to window tracker events
+            _windowTracker.AppSwitched += OnAppSwitched;
+            _windowTracker.WindowChanged += OnWindowChanged; 
+        }
+
+        #region Properties
         public bool IsTracking
         {
             get => _isTracking;
@@ -37,10 +81,28 @@ namespace FocusAssistant.ViewModels
             set { _statusText = value; OnPropertyChanged(); }
         }
 
-        public string RecentInterventionMessage
+        public string ProductivityScore
         {
-            get => _recentInterventionMessage;
-            set { _recentInterventionMessage = value; OnPropertyChanged(); }
+            get => _productivityScore;
+            set { _productivityScore = value; OnPropertyChanged(); }
+        }
+
+        public string RecentInterventions
+        {
+            get => _recentInterventions;
+            set { _recentInterventions = value; OnPropertyChanged(); }
+        }
+
+        public string AIStatus
+        {
+            get => _aiStatus;
+            set { _aiStatus = value; OnPropertyChanged(); }
+        }
+
+        public string TotalActivities
+        {
+            get => _totalActivities;
+            set { _totalActivities = value; OnPropertyChanged(); }
         }
 
         public string CurrentApp
@@ -55,89 +117,136 @@ namespace FocusAssistant.ViewModels
             set { _currentWindow = value; OnPropertyChanged(); }
         }
 
-        public string CurrentDuration
+        public string WindowStatus
         {
-            get => _currentDuration;
-            set { _currentDuration = value; OnPropertyChanged(); }
+            get => _windowStatusText;
+            set { _windowStatusText = value; OnPropertyChanged(); }
         }
 
-        public string ProductivityRate
+        public string Date
         {
-            get => _productivityRate;
-            set { _productivityRate = value; OnPropertyChanged(); }
+            get => _date;
+            set { _date = value; OnPropertyChanged(); }
         }
 
-        public string TotalActivities
+        public List<string> TopApps
         {
-            get => _totalActivities;
-            set { _totalActivities = value; OnPropertyChanged(); }
+            get => _topApps;
+            set { _topApps = value; OnPropertyChanged(); }
         }
 
-        public string RecentInterventions
+        public ObservableCollection<ActivityLogItem> ActivityLog { get; }
+        #endregion
+
+        #region Commands
+        public ICommand StartTrackingCommand { get; }
+        public ICommand StopTrackingCommand { get; }
+        #endregion
+
+        #region Command Handlers
+        private async Task StartTrackingAsync()
         {
-            get => _recentInterventions;
-            set { _recentInterventions = value; OnPropertyChanged(); }
+            try
+            {
+                StatusText = "Actively tracking...";
+                IsTracking = true;
+                AIStatus = "Active";
+                await _windowTracker.StartTrackingAsync();
+
+                // Load initial analytics
+                await LoadAnalyticsAsync();
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"Error: {ex.Message}";
+                AIStatus = "Error";
+            }
         }
 
-        public string ProductivityScore
+        private async Task StopTrackingAsync()
         {
-            get => _productivityScore;
-            set { _productivityScore = value; OnPropertyChanged(); }
+            try
+            {
+                StatusText = "Tracking stopped";
+                IsTracking = false;
+                AIStatus = "Stopped";
+                await _windowTracker.StopTrackingAsync();
+                await _sessionManager.EndSessionAsync();
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"Error: {ex.Message}";
+                AIStatus = "Error";
+            }
+        }
+        #endregion
+
+        #region Analytics Loading
+        public async Task LoadAnalyticsAsync()
+        {
+            try
+            {
+                var analytics = await _analyticsService.GetAnalyticsAsync();
+                var report = await _reportGenerator.GetReportFlask();
+
+                ProductivityScore = $"{analytics.ProductivityRate:F1}%";
+                RecentInterventions = $"{report.RecentInterventions:F1}h";
+                AIStatus = report.Status ?? "Active";
+                Date = report.Date;
+                TopApps = report.TopApps ?? new List<string>();
+                TotalActivities = ActivityLog.Count.ToString();
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"Error loading analytics: {ex.Message}";
+                AIStatus = "Error";
+            }
+        }
+        #endregion
+
+        #region Event Handlers
+        private void OnAppSwitched(object sender, AppUsage app)
+        {
+            CurrentApp = app.AppName;
+
+            ActivityLog.Add(new ActivityLogItem
+            {
+                AppName = app.AppName,
+                DurationText = $"{app.Duration.TotalMinutes:F1} min"
+            });
+
+            // Update total activities count
+            TotalActivities = ActivityLog.Count.ToString();
+
+            // Update status
+            StatusText = $"Switched to {app.AppName}";
         }
 
-        public string ProductiveTime
+        private void 
+            OnWindowChanged(object sender, AppWindowChangedEventArgs window)
         {
-            get => _productiveTime;
-            set { _productiveTime = value; OnPropertyChanged(); }
+            CurrentWindow = window.CurrentWindowTitle;
+            
+            StatusText = $"Active window: {window.CurrentWindowTitle}";
+        }
+        #endregion
+
+        #region Public Methods
+        public async Task RefreshDataAsync()
+        {
+            await LoadAnalyticsAsync();
         }
 
-        public string DistractedTime
+        public void ClearActivityLog()
         {
-            get => _distractedTime;
-            set { _distractedTime = value; OnPropertyChanged(); }
+            ActivityLog.Clear();
+            TotalActivities = "0";
         }
-
-        public string MostProductiveHour
-        {
-            get => _mostProductiveHour;
-            set { _mostProductiveHour = value; OnPropertyChanged(); }
-        }
-
-        public string LeastProductiveHour
-        {
-            get => _leastProductiveHour;
-            set { _leastProductiveHour = value; OnPropertyChanged(); }
-        }
-
-        public string ProductivityStreak
-        {
-            get => _productivityStreak;
-            set { _productivityStreak = value; OnPropertyChanged(); }
-        }
-
-        public string UserEngagementTrend
-        {
-            get => _userEngagementTrend;
-            set { _userEngagementTrend = value; OnPropertyChanged(); }
-        }
-
-        public string ActionEffectiveness
-        {
-            get => _actionEffectiveness;
-            set { _actionEffectiveness = value; OnPropertyChanged(); }
-        }
-
-        public ObservableCollection<ActivityLogItem> ActivityLog
-        {
-            get => _activityLog;
-            set { _activityLog = value; OnPropertyChanged(); }
-        }
+        #endregion
 
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 
     public class ActivityLogItem
@@ -145,4 +254,5 @@ namespace FocusAssistant.ViewModels
         public string AppName { get; set; }
         public string DurationText { get; set; }
     }
+
 }

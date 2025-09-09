@@ -10,20 +10,12 @@ namespace FocusAssistant.Services.Session.Interfaces
     public interface ISessionManager
     {
         // Events
-        event EventHandler<WorkSession> SessionStarted;
-        event EventHandler<WorkSession> SessionEnded;
-        event EventHandler<AppUsage> AppUsageAdded;
-        event EventHandler<WorkSession> SessionUpdated;
+        event EventHandler<UserSession> SessionStarted;
+        event EventHandler<UserSession> SessionEnded;
 
-        // Properties
-        WorkSession CurrentSession { get; }
-        List<WorkSession> TodaySessions { get; }
-        bool IsSessionActive { get; }
-
-        // Methods
-        void StartSession();
+        Task StartSessionAsync();
         Task EndSessionAsync();
-        void AddAppUsage(AppUsage appUsage);
         SessionStatistics GetTodayStatistics();
+        void AddAppUsage(string appname,AppUsage currentAppUsage);
     }
 }

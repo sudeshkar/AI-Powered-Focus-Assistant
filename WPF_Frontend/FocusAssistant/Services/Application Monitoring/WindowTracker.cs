@@ -2,6 +2,7 @@
 using FocusAssistant.Models.Response_Models;
 using FocusAssistant.Services.Application_Monitoring.Interfaces;
 using FocusAssistant.Services.Data_log_and_Save_Repo.Interfaces;
+using FocusAssistant.Services.Datafetch.Interfaces;
 using FocusAssistant.Services.Flask.Interfaces;
 using FocusAssistant.Services.Models.Events;
 using FocusAssistant.Services.Session.Interfaces;
@@ -16,6 +17,7 @@ namespace FocusAssistant.Services.Application_Monitoring
 {
     public class WindowTracker : IDisposable
     {
+        // Dependencies
         private readonly IWindowMonitor _windowMonitor;
         private readonly IIdleMonitor _idleMonitor;
         private readonly ISessionManager _sessionManager;
@@ -23,17 +25,18 @@ namespace FocusAssistant.Services.Application_Monitoring
         private readonly IActivityService _activityService;
         private readonly IFeedbackService _feedbackService;
         private readonly IActivityManagementService _activityManager;
+        private readonly IBaseService<WorkSession> _userSession;
+
+        // Internal state
         private CancellationTokenSource _cts = new CancellationTokenSource();
         private DateTime _lastSwitchTime;
-        public AppUsage _currentAppUsage;
+        private AppUsage _currentAppUsage;
         private bool _isTracking = false;
 
-        public event EventHandler<AppUsage> AppSwitched;
-        public event EventHandler<List<AppUsage>> SessionCompleted;
-        public event EventHandler<ActivityResponse> AiInterventionReceived;
 
+        // Public properties
         public bool IsTracking => _isTracking;
-        public WorkSession CurrentSession => _sessionManager.CurrentSession;
+        
 
         public WindowTracker(
             IWindowMonitor windowMonitor,
@@ -42,7 +45,9 @@ namespace FocusAssistant.Services.Application_Monitoring
             IProductivityClassifier productivityClassifier,
             IActivityService activityService,
             IFeedbackService feedbackService,
-            IActivityManagementService activityManagementService)
+            IActivityManagementService activityManager,
+            IBaseService<WorkSession> userSession
+        )
         {
             _windowMonitor = windowMonitor ?? throw new ArgumentNullException(nameof(windowMonitor));
             _idleMonitor = idleMonitor ?? throw new ArgumentNullException(nameof(idleMonitor));
@@ -50,17 +55,22 @@ namespace FocusAssistant.Services.Application_Monitoring
             _productivityClassifier = productivityClassifier ?? throw new ArgumentNullException(nameof(productivityClassifier));
             _activityService = activityService ?? throw new ArgumentNullException(nameof(activityService));
             _feedbackService = feedbackService ?? throw new ArgumentNullException(nameof(feedbackService));
-            _activityManager = activityManagementService ?? throw new ArgumentNullException(nameof(activityManagementService));
+            _activityManager = activityManager ?? throw new ArgumentNullException(nameof(activityManager));
+            _userSession = userSession ?? throw new ArgumentNullException(nameof(userSession));
 
+            // Subscribe to external services
             _windowMonitor.WindowChanged += OnWindowChanged;
             _idleMonitor.IdleStateChanged += OnIdleStateChanged;
+
+          
         }
 
+        #region Start / Stop Tracking
         public async Task StartTrackingAsync()
         {
             if (_isTracking)
             {
-                Console.WriteLine("WindowTracker already tracking, skipping start.");
+                Console.WriteLine("⚠️ WindowTracker already tracking, skipping start.");
                 return;
             }
 
@@ -70,26 +80,32 @@ namespace FocusAssistant.Services.Application_Monitoring
 
             try
             {
+                await _sessionManager.StartSessionAsync();
+
                 _windowMonitor.StartMonitoring();
                 _idleMonitor.StartMonitoring();
-                _sessionManager.StartSession();
+                
+
+                // Get initial active window
                 var (appName, windowTitle) = _windowMonitor.GetActiveWindow();
                 if (!string.IsNullOrEmpty(appName))
                 {
                     _currentAppUsage = CreateAppUsage(appName, windowTitle);
                     _lastSwitchTime = DateTime.Now;
-                    _sessionManager.AddAppUsage(_currentAppUsage);
-                    Console.WriteLine($"Initial app usage set: {appName}, {windowTitle}");
+                    _sessionManager.AddAppUsage(appName, _currentAppUsage);
+
+                    Console.WriteLine($"✅ Initial app usage detected: {appName}, {windowTitle}");
                 }
                 else
                 {
-                    Console.WriteLine("Warning: No initial app detected by WindowMonitor");
+                    Console.WriteLine("⚠️ No initial app detected by WindowMonitor");
                 }
-                Console.WriteLine("Window tracking started...");
+
+                Console.WriteLine("✅ Window tracking started successfully.");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"StartTracking error: {ex.Message} at {DateTime.Now:HH:mm:ss.fff}");
+                Console.WriteLine($"❌ StartTrackingAsync error: {ex.Message}");
                 _isTracking = false;
                 throw;
             }
@@ -99,7 +115,7 @@ namespace FocusAssistant.Services.Application_Monitoring
         {
             if (!_isTracking)
             {
-                Console.WriteLine("WindowTracker not tracking, skipping stop.");
+                Console.WriteLine("⚠️ WindowTracker is not tracking, skipping stop.");
                 return;
             }
 
@@ -111,35 +127,38 @@ namespace FocusAssistant.Services.Application_Monitoring
                 FinalizeCurrentAppUsage();
 
                 // Stop monitors asynchronously
-                var stopWindowTask = Task.Run(() => _windowMonitor.StopMonitoring());
-                var stopIdleTask = Task.Run(() => _idleMonitor.StopMonitoring());
-                await Task.WhenAll(stopWindowTask, stopIdleTask);
+                await Task.WhenAll(
+                    Task.Run(() => _windowMonitor.StopMonitoring()),
+                    Task.Run(() => _idleMonitor.StopMonitoring())
+                );
 
-                // Save session in the background
-                var sessionAppUsages = _sessionManager.CurrentSession?.AppUsages ?? new List<AppUsage>();
-                if (sessionAppUsages.Any())
-                {
-                    await Task.Run(() => _activityManager.SaveSessionFromActivitiesAsync(sessionAppUsages));
-                }
+                _windowMonitor.StopMonitoring();
+                _idleMonitor.StopMonitoring() ;
 
-                _sessionManager.EndSessionAsync();
-                SessionCompleted?.Invoke(this, sessionAppUsages);
+                
+                await _sessionManager.EndSessionAsync();
+
+                SessionCompleted?.Invoke(this, _sessionManager.cure.AppUsages ?? new List<AppUsage>());
 
                 _cts?.Dispose();
                 _cts = new CancellationTokenSource();
                 _currentAppUsage = null;
-                Console.WriteLine("Window tracking stopped.");
+
+                Console.WriteLine("🛑 Window tracking stopped successfully.");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"StopTracking error: {ex.Message} at {DateTime.Now:HH:mm:ss.fff}");
+                Console.WriteLine($"❌ StopTrackingAsync error: {ex.Message}");
                 throw;
             }
         }
+        #endregion
 
+        #region Event Handlers
         private void OnWindowChanged(object sender, AppWindowChangedEventArgs e)
         {
-            Console.WriteLine($"WindowChanged detected at {DateTime.Now:HH:mm:ss.fff}: App={e.CurrentAppName}, Title={e.CurrentWindowTitle}");
+            Console.WriteLine($"🔹 Window changed at {DateTime.Now:HH:mm:ss}: {e.CurrentAppName} - {e.CurrentWindowTitle}");
+
             if (!_isTracking || _idleMonitor.IsIdle) return;
 
             FinalizeCurrentAppUsage();
@@ -149,7 +168,8 @@ namespace FocusAssistant.Services.Application_Monitoring
                 _currentAppUsage = CreateAppUsage(e.CurrentAppName, e.CurrentWindowTitle);
                 _lastSwitchTime = DateTime.Now;
                 _sessionManager.AddAppUsage(_currentAppUsage);
-                Console.WriteLine($"New app usage started: {e.CurrentAppName}, {e.CurrentWindowTitle}");
+
+                Console.WriteLine($"📊 Tracking new app: {e.CurrentAppName}, {e.CurrentWindowTitle}");
             }
         }
 
@@ -160,7 +180,7 @@ namespace FocusAssistant.Services.Application_Monitoring
             if (e.IsIdle)
             {
                 FinalizeCurrentAppUsage();
-                Console.WriteLine("User is idle, pausing tracking...");
+                Console.WriteLine("⏸ User went idle, pausing tracking...");
             }
             else
             {
@@ -170,10 +190,31 @@ namespace FocusAssistant.Services.Application_Monitoring
                     _currentAppUsage = CreateAppUsage(appName, windowTitle);
                     _sessionManager.AddAppUsage(_currentAppUsage);
                 }
-                Console.WriteLine("User is active, resuming tracking...");
+
+                Console.WriteLine("▶️ User active again, resuming tracking...");
+            }
+        }
+        #endregion
+
+        #region Internal Event Subscriptions
+        private void HandleAppSwitchedInternal(object sender, AppUsage e)
+        {
+            Console.WriteLine($"[Internal] App switched to: {e.AppName}");
+
+            // Example: Update current session
+            if (_sessionManager.CurrentSession != null)
+            {
+                _sessionManager.CurrentSession.LastUsedApp = e.AppName;
             }
         }
 
+        private void HandleSessionCompletedInternal(object sender, List<AppUsage> appUsages)
+        {
+            Console.WriteLine($"[Internal] Session completed. Total apps tracked: {appUsages.Count}");
+        }
+        #endregion
+
+        #region Core Logic
         private AppUsage CreateAppUsage(string appName, string windowTitle)
         {
             return new AppUsage
@@ -189,7 +230,7 @@ namespace FocusAssistant.Services.Application_Monitoring
         {
             if (_currentAppUsage == null)
             {
-                Console.WriteLine($"Current App Usage Null at {DateTime.Now:HH:mm:ss.fff}");
+                Console.WriteLine($"⚠️ No current app usage to finalize at {DateTime.Now:HH:mm:ss}");
                 return;
             }
 
@@ -199,23 +240,26 @@ namespace FocusAssistant.Services.Application_Monitoring
 
             if (_currentAppUsage.Duration.TotalSeconds >= 1)
             {
+                // Raise event for external subscribers
                 AppSwitched?.Invoke(this, _currentAppUsage);
-                Console.WriteLine($"AppSwitched event raised for: {_currentAppUsage.AppName}, duration: {_currentAppUsage.Duration.TotalSeconds:F3}s");
+
+                Console.WriteLine($"📢 AppSwitched event raised for: {_currentAppUsage.AppName}, Duration: {_currentAppUsage.Duration.TotalSeconds:F2}s");
+
+                // Notify AI
                 Task.Run(() => NotifyAiAsync(_currentAppUsage, _cts.Token));
             }
+
             _currentAppUsage = null;
         }
+        #endregion
 
+        #region AI Notifications
         private async Task NotifyAiAsync(AppUsage usage, CancellationToken cancellationToken)
         {
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (usage == null)
-                {
-                    Console.WriteLine("NotifyAiAsync called with null usage");
-                    return;
-                }
+                if (usage == null) return;
 
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
                 using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, cts.Token);
@@ -224,14 +268,7 @@ namespace FocusAssistant.Services.Application_Monitoring
 
                 if (response.Status == "error" || string.IsNullOrEmpty(response.InterventionMessage))
                 {
-                    Console.WriteLine("AI response was null or collecting data");
-                    if (new Random().NextDouble() < 0.1)
-                    {
-                        new ToastContentBuilder()
-                            .AddText("Focus Assistant")
-                            .AddText("AI is learning from your activities. Keep going!")
-                            .Show();
-                    }
+                    Console.WriteLine("⚠️ AI is still learning from your data.");
                     return;
                 }
 
@@ -240,14 +277,16 @@ namespace FocusAssistant.Services.Application_Monitoring
             }
             catch (OperationCanceledException)
             {
-                Console.WriteLine("NotifyAiAsync canceled or timed out");
+                Console.WriteLine("⚠️ AI notification canceled or timed out.");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"AI prediction failed: {ex.Message}");
+                Console.WriteLine($"❌ AI notification failed: {ex.Message}");
             }
         }
+        #endregion
 
+        #region Dispose
         public async ValueTask DisposeAsync()
         {
             try
@@ -255,16 +294,20 @@ namespace FocusAssistant.Services.Application_Monitoring
                 if (_isTracking)
                 {
                     await StopTrackingAsync();
-                    Console.WriteLine($"StopTracking called during DisposeAsync at {DateTime.Now:HH:mm:ss.fff}");
                 }
+
+                // Unsubscribe from events
                 _windowMonitor.WindowChanged -= OnWindowChanged;
                 _idleMonitor.IdleStateChanged -= OnIdleStateChanged;
+                this.AppSwitched -= HandleAppSwitchedInternal;
+                this.SessionCompleted -= HandleSessionCompletedInternal;
+
                 _cts?.Dispose();
-                Console.WriteLine($"WindowTracker disposed at {DateTime.Now:HH:mm:ss.fff}");
+                Console.WriteLine("🗑 WindowTracker disposed.");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"DisposeAsync error: {ex.Message} at {DateTime.Now:HH:mm:ss.fff}");
+                Console.WriteLine($"❌ DisposeAsync error: {ex.Message}");
             }
         }
 
@@ -272,8 +315,10 @@ namespace FocusAssistant.Services.Application_Monitoring
         {
             DisposeAsync().GetAwaiter().GetResult();
         }
+        #endregion
     }
 
+    #region Task Extensions
     public static class TaskExtensions
     {
         public static async Task<T> WithCancellation<T>(this Task<T> task, CancellationToken cancellationToken)
@@ -289,4 +334,5 @@ namespace FocusAssistant.Services.Application_Monitoring
             return await task;
         }
     }
+    #endregion
 }

@@ -32,13 +32,17 @@ namespace FocusAssistant.Services.Application_Monitoring
         private bool _isMonitoring = false;
 
         public bool IsMonitoring => _isMonitoring;
+
+        public TimeSpan PollingInterval { get; }
+
         public event EventHandler<AppWindowChangedEventArgs> WindowChanged;
 
-        public WindowsApiWindowMonitor()
+        public WindowsApiWindowMonitor(TimeSpan? pollingInterval = null)
         {
-            Console.WriteLine($"WindowsApiWindowMonitor initialized at {DateTime.Now:HH:mm:ss.fff}");
-            // Existing constructor logic
+            PollingInterval = pollingInterval ?? TimeSpan.FromSeconds(1);
+            Console.WriteLine($"Initialized with PollingInterval: {PollingInterval.TotalSeconds} seconds");
         }
+
         public (string appName, string windowTitle) GetActiveWindow()
         {
             try

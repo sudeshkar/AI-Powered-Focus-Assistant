@@ -159,11 +159,11 @@ namespace FocusAssistant.Services.Data_log_and_Save_Repo.Service_Layer
             try
             {
                 await _sessionRepository.SaveSessionAsync(session);
-                _loggingService.LogInformation($"Work session saved successfully: {session.SessionId}");
+                _loggingService.LogInformation($"Work session saved successfully: {session.wID}");
             }
             catch (Exception ex)
             {
-                _loggingService.LogError($"Failed to save work session: {session?.SessionId}", ex);
+                _loggingService.LogError($"Failed to save work session: {session?.wID}", ex);
                 throw;
             }
         }
@@ -201,7 +201,7 @@ namespace FocusAssistant.Services.Data_log_and_Save_Repo.Service_Layer
 
             return new WorkSession
             {
-                SessionId = Guid.NewGuid().ToString(),
+                wID = Guid.NewGuid().ToString(),
                 StartTime = startTime,
                 EndTime = endTime,
                 Duration = endTime - startTime,
