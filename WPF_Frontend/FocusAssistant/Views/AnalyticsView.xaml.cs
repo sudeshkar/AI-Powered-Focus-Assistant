@@ -32,49 +32,49 @@ namespace FocusAssistant.Views
                 var analytics = await _analyticsService.GetAnalyticsAsync();
                 var insights = await _analyticsService.GetInsightsAsync();
 
-                Dispatcher.Invoke(() =>
-                {
-                    // Check if analytics or insights are null
-                    if (analytics == null || insights == null || insights.Insights == null)
-                    {
-                        SetDisconnectedState();
-                        return;
-                    }
+                //Dispatcher.Invoke(() =>
+                //{
+                //    // Check if analytics or insights are null
+                //    if (analytics == null || insights == null || insights.Insights == null)
+                //    {
+                //        SetDisconnectedState();
+                //        return;
+                //    }
 
-                    // Top row
-                    TodayProductivityText.Text = $"{analytics.ProductivityRate:F0}%";
-                    TodayActivitiesText.Text = analytics.TotalActivities.ToString();
-                    TodayInterventionsText.Text = analytics.RecentInterventions.ToString();
+                //    // Top row
+                //    TodayProductivityText.Text = $"{analytics.ProductivityRate:F0}%";
+                //    TodayActivitiesText.Text = analytics.TotalActivities.ToString();
+                //    TodayInterventionsText.Text = analytics.RecentInterventions.ToString();
 
-                    // Readiness
-                    int pts = insights.Insights.CircadianInsights?.TotalDataPoints ?? 0;
-                    int dpc = insights.Insights.BehavioralPatterns?.DailyPatternsCount ?? 0;
-                    int sus = insights.Insights.StateSpaceCoverage?.TotalUniqueStates ?? 0;
-                    double score = CalculateReadiness(pts, dpc, sus);
+                //    // Readiness
+                //    int pts = insights.Insights.CircadianInsights?.TotalDataPoints ?? 0;
+                //    int dpc = insights.Insights.BehavioralPatterns?.DailyPatternsCount ?? 0;
+                //    int sus = insights.Insights.StateSpaceCoverage?.TotalUniqueStates ?? 0;
+                //    double score = CalculateReadiness(pts, dpc, sus);
 
-                    DataReadinessProgress.Value = score;
-                    ReadinessStatusText.Text = score >= 80 ? "Ready" : score >= 50 ? "Almost Ready" : "Not Ready";
-                    ReadinessMessageText.Text = score >= 80 ? "✅ Sufficient data for ML training."
-                                                            : score >= 50 ? "⚠️ Good progress! Collect more data."
-                                                                          : "❌ More data needed for ML training.";
+                //    DataReadinessProgress.Value = score;
+                //    ReadinessStatusText.Text = score >= 80 ? "Ready" : score >= 50 ? "Almost Ready" : "Not Ready";
+                //    ReadinessMessageText.Text = score >= 80 ? "✅ Sufficient data for ML training."
+                //                                            : score >= 50 ? "⚠️ Good progress! Collect more data."
+                //                                                          : "❌ More data needed for ML training.";
 
-                    DataPointsText.Text = pts.ToString();
-                    StatesExploredText.Text = sus.ToString();
-                    FeedbackText.Text = insights.Insights.LearningMetrics?.TotalFeedbackReceived.ToString() ?? "0";
+                //    DataPointsText.Text = pts.ToString();
+                //    StatesExploredText.Text = sus.ToString();
+                //    FeedbackText.Text = insights.Insights.LearningMetrics?.TotalFeedbackReceived.ToString() ?? "0";
 
-                    // Lists
-                    InterventionList.ItemsSource = insights.Insights.ActionEffectiveness != null
-                        ? insights.Insights.ActionEffectiveness
-                            .Select(kv => $"{kv.Key.Replace("_", " ")}  –  {kv.Value.AverageReward:F2}")
-                            .ToList()
-                        : new List<string> { "No data" };
+                //    // Lists
+                //    InterventionList.ItemsSource = insights.Insights.ActionEffectiveness != null
+                //        ? insights.Insights.ActionEffectiveness
+                //            .Select(kv => $"{kv.Key.Replace("_", " ")}  –  {kv.Value.AverageReward:F2}")
+                //            .ToList()
+                //        : new List<string> { "No data" };
 
-                    AppUsageList.ItemsSource = analytics.TopApps != null
-                        ? analytics.TopApps
-                            .Select(kv => $"{kv.Key}  –  {kv.Value} min")
-                            .ToList()
-                        : new List<string> { "No data" };
-                });
+                //    AppUsageList.ItemsSource = analytics.TopApps != null
+                //        ? analytics.TopApps
+                //            .Select(kv => $"{kv.Key}  –  {kv.Value} min")
+                //            .ToList()
+                //        : new List<string> { "No data" };
+                //});
             }
             catch
             {

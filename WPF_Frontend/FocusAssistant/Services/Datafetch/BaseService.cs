@@ -58,5 +58,7 @@ namespace FocusAssistant.Services.Datafetch
             var entity = await _dbSet.FindAsync(id);
             return entity != null;
         }
+
+        
     }
 }

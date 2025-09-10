@@ -7,8 +7,8 @@ namespace FocusAssistant.Services.Session.Interfaces
 {
     public interface IReportGenerator
     {
-        Task<AnalyticsResponse> GenerateReportInternal();
-        Task<AnalyticsResponse> GetReportFlask();
+        Task<AnalyticsResponse> GenerateReportInternal(DateTime date);
+        Task<AnalyticsResponse> GetReportFlask(AnalyticsResponse analyticsResponse);
 
     }
 }

@@ -1,6 +1,7 @@
 ﻿using FocusAssistant.Models;
 using FocusAssistant.Services.Export_Services.Interfaces;
 using FocusAssistant.Services.Interfaces;
+using FocusAssistant.Services.Session.Interfaces;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -31,8 +32,8 @@ namespace FocusAssistant.Services.Export_Services
             for (int i = 0; i < days; i++)
             {
                 var date = DateTime.Today.AddDays(-i);
-                var report = _reportGenerator.GenerateDailyReport(date);
-                if (report.NumberOfSessions > 0)
+                var report = await  _reportGenerator.GenerateReportInternal(date);
+                if (report.TotalActivities > 0)
                     reports.Add(report);
             }
 

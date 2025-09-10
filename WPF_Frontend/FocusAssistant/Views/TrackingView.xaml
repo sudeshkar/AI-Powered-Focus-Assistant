@@ -4,6 +4,7 @@
              xmlns:vm="clr-namespace:FocusAssistant.ViewModels"
              Height="600" Width="800">
 
+
     <UserControl.Resources>
         <!-- Metallic Gradient Brushes -->
         <LinearGradientBrush x:Key="PrimaryGradient" StartPoint="0,0" EndPoint="1,1">

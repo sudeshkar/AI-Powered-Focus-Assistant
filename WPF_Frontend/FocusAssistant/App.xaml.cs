@@ -1,17 +1,26 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using FocusAssistant.Converters;
+using FocusAssistant.Data;
+using FocusAssistant.Models;
+using FocusAssistant.Services.Application_Monitoring;
+using FocusAssistant.Services.Application_Monitoring.Interfaces;
+using FocusAssistant.Services.Datafetch;
+using FocusAssistant.Services.Datafetch.Interfaces;
+using FocusAssistant.Services.DependencyInjection;
+using FocusAssistant.Services.Flask;
+using FocusAssistant.Services.Flask.Interfaces;
+using FocusAssistant.Services.ML;
+using FocusAssistant.Services.Session;
+using FocusAssistant.Services.Session.Interfaces;
+using FocusAssistant.ViewModels;
+using FocusAssistant.Views;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Windows;
-using FocusAssistant.Converters;
-using FocusAssistant.Services.Application_Monitoring;
-using FocusAssistant.Services.DependencyInjection;
-using FocusAssistant.Services.Flask;
-using FocusAssistant.Services.ML;
-using FocusAssistant.Services.Session;
-using FocusAssistant.ViewModels;
-using FocusAssistant.Views;
-using FocusAssistant.Data;
+using Windows.Services.Maps;
 
 namespace FocusAssistant
 {
@@ -60,8 +69,38 @@ namespace FocusAssistant
             return Host.CreateDefaultBuilder()
                 .ConfigureServices((context, services) =>
                 {
-                    // Register core services via extension method
-                    services.AddFocusAssistantServices();
+                    // Database Context
+                    services.AddDbContext<FocusAssistantDbContext>(options =>
+    options.UseSqlite(context.Configuration.GetConnectionString("DefaultConnection")
+                      ?? "Data Source=FocusAssistant.db"));
+
+
+                    // Data Services
+                    services.AddScoped<IUserSessionService, UserSessionService>();
+                    services.AddScoped<IBaseService<UserSession>, UserSessionService>();
+                    services.AddScoped<IAppUsageService, AppUsageService>();
+                    services.AddScoped<IWorkSessionService, WorkSessionService>();
+
+                    // Monitoring Services
+                    services.AddSingleton<IIdleMonitor, WindowsApiIdleMonitor>();
+                    services.AddSingleton<IWindowMonitor, WindowsApiWindowMonitor>();
+                    services.AddSingleton<WindowTracker>();
+                    services.AddTransient<SessionManager>();
+
+                    // ML Services
+                    services.AddScoped<IActivityService, FlaskActivityService>(); // Adjust based on your ML implementation
+                    services.AddScoped<IAnalyticsService, AnalyticsService>(); // Adjust based on your ML implementation
+
+                    // Flask Services
+                    services.AddSingleton<IFlaskServerManager, FlaskServerManager>();
+                    services.AddSingleton<FlaskIntegrationFacade>();
+
+
+                    services.AddScoped<IAnalyticsService, AnalyticsService>();
+                    services.AddScoped<IReportGenerator, DailyReportGenerator>();
+
+
+
 
                     // Windows and Views
                     services.AddTransient<MainWindow>();
@@ -69,32 +108,10 @@ namespace FocusAssistant
                     services.AddTransient<TrackingView>();
                     services.AddTransient<AnalyticsView>();
 
-                    // ViewModels
+                    // ViewModels (ensure they receive dependencies)
                     services.AddTransient<DashboardViewModel>();
                     services.AddTransient<TrackingViewModel>();
                     services.AddTransient<RecommendationViewModel>();
-
-                    // Converters
-                    services.AddSingleton<TrackingColorConverter>();
-                    services.AddSingleton<TrackingButtonContentConverter>();
-                    services.AddSingleton<IdleStatusColorConverter>();
-                    services.AddSingleton<ZeroCountToVisibilityConverter>();
-                    services.AddSingleton<NullToVisibilityConverter>();
-                    services.AddSingleton<BoolToVisibilityConverter>();
-                    services.AddSingleton<StringToDoubleConverter>();
-                })
-                .ConfigureLogging(logging =>
-                {
-                    logging.ClearProviders();
-                    logging.AddConsole(options =>
-                    {
-                        options.TimestampFormat = "[HH:mm:ss.fff] ";
-                        options.IncludeScopes = true;
-                    });
-                    logging.AddDebug();
-                    logging.SetMinimumLevel(LogLevel.Information);
-                    logging.AddFilter("Microsoft", LogLevel.Warning);
-                    logging.AddFilter("System", LogLevel.Warning);
                 });
         }
 
@@ -110,7 +127,7 @@ namespace FocusAssistant
                     if (windowTracker != null)
                     {
                         Console.WriteLine($"Disposing WindowTracker at {DateTime.Now:HH:mm:ss.fff}");
-                        await windowTracker.DisposeAsync();
+                        await windowTracker.StopTrackingAsync();
                     }
 
                     var flaskFacade = Services?.GetService<FlaskIntegrationFacade>();

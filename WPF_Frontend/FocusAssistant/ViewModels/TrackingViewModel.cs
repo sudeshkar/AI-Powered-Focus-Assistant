@@ -1,6 +1,7 @@
 ﻿using FocusAssistant.Models;
 using FocusAssistant.Models.Response_Models;
 using FocusAssistant.Services.Application_Monitoring;
+using FocusAssistant.Services.Application_Monitoring.Interfaces;
 using FocusAssistant.Services.Flask.Interfaces;
 using FocusAssistant.Services.Interfaces;
 using FocusAssistant.Services.Models.Events;
@@ -16,7 +17,7 @@ using System.Windows.Input;
 
 namespace FocusAssistant.ViewModels
 {
-    public class TrackingViewModel : INotifyPropertyChanged
+    public class TrackingViewModel : INotifyPropertyChanged,IDisposable
     {
         private bool _isTracking;
         private string _statusText;
@@ -33,19 +34,19 @@ namespace FocusAssistant.ViewModels
 
         private readonly IAnalyticsService _analyticsService;
         private readonly IReportGenerator _reportGenerator;
-        private readonly ISessionManager _sessionManager;
         private readonly WindowTracker _windowTracker;
+        private readonly IWindowMonitor _windowMonitor;
 
         public TrackingViewModel(
             WindowTracker windowTracker,
             IAnalyticsService analyticsService,
             IReportGenerator reportGenerator,
-            ISessionManager sessionManager)
+            IWindowMonitor windowMonitor)
         {
             _windowTracker = windowTracker;
             _analyticsService = analyticsService;
             _reportGenerator = reportGenerator;
-            _sessionManager = sessionManager;
+            _windowMonitor = windowMonitor;
 
             // Initialize collections
             ActivityLog = new ObservableCollection<ActivityLogItem>();
@@ -63,9 +64,9 @@ namespace FocusAssistant.ViewModels
             CurrentApp = "No application detected";
             CurrentWindow = "No window detected";
 
-            // Subscribe to window tracker events
-            _windowTracker.AppSwitched += OnAppSwitched;
-            _windowTracker.WindowChanged += OnWindowChanged; 
+          
+            
+            _windowMonitor.WindowChanged += OnWindowChanged; 
         }
 
         #region Properties
@@ -171,7 +172,6 @@ namespace FocusAssistant.ViewModels
                 IsTracking = false;
                 AIStatus = "Stopped";
                 await _windowTracker.StopTrackingAsync();
-                await _sessionManager.EndSessionAsync();
             }
             catch (Exception ex)
             {
@@ -187,7 +187,7 @@ namespace FocusAssistant.ViewModels
             try
             {
                 var analytics = await _analyticsService.GetAnalyticsAsync();
-                var report = await _reportGenerator.GetReportFlask();
+                var report = await _reportGenerator.GetReportFlask(analytics);
 
                 ProductivityScore = $"{analytics.ProductivityRate:F1}%";
                 RecentInterventions = $"{report.RecentInterventions:F1}h";
@@ -226,6 +226,7 @@ namespace FocusAssistant.ViewModels
             OnWindowChanged(object sender, AppWindowChangedEventArgs window)
         {
             CurrentWindow = window.CurrentWindowTitle;
+            CurrentApp = window.CurrentAppName;
             
             StatusText = $"Active window: {window.CurrentWindowTitle}";
         }
@@ -247,6 +248,12 @@ namespace FocusAssistant.ViewModels
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+
+        public void Dispose()
+        {
+            _windowMonitor.StopMonitoring();
+            _windowMonitor.WindowChanged -= OnWindowChanged;
+        }
     }
 
     public class ActivityLogItem

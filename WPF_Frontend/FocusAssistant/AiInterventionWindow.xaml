@@ -1,4 +1,4 @@
-﻿<Window x:Class="FocusAssistant.Views.AiInterventionWindow"
+﻿<Window x:Class="FocusAssistant.AiInterventionWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Width="300" Height="100"

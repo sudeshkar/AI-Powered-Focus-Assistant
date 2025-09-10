@@ -29,29 +29,29 @@ namespace FocusAssistant.Views
         {
             try
             {
-                // Fetch data (simulate API call)
-                var dashboardData = await FetchAnalyticsDataAsync();
+                //// Fetch data (simulate API call)
+                //var dashboardData = await FetchAnalyticsDataAsync();
 
-                // Update the ViewModel with fetched data
-                // No need for Dispatcher.Invoke since we're already on UI thread for property updates
-                _viewModel.ProductivityRate = $"{dashboardData.ProductivityRate:F0}%";
-                _viewModel.TotalActivities = dashboardData.TotalActivities.ToString();
-                _viewModel.RecentInterventions = dashboardData.RecentInterventions.ToString();
+                //// Update the ViewModel with fetched data
+                //// No need for Dispatcher.Invoke since we're already on UI thread for property updates
+                //_viewModel.ProductivityRate = $"{dashboardData.ProductivityRate:F0}%";
+                //_viewModel.TotalActivities = dashboardData.TotalActivities.ToString();
+                //_viewModel.RecentInterventions = dashboardData.RecentInterventions.ToString();
 
-                // Clear existing data in TopApps before adding the new data
-                _viewModel.TopApps.Clear();
+                //// Clear existing data in TopApps before adding the new data
+                //_viewModel.TopApps.Clear();
 
-                if (dashboardData.TopApps != null)
-                {
-                    // Add the fetched apps to the TopApps ObservableCollection, ordered by the app's value
-                    foreach (var app in dashboardData.TopApps.OrderByDescending(x => x.Value))
-                    {
-                        _viewModel.TopApps.Add(app);
-                    }
-                }
+                //if (dashboardData.TopApps != null)
+                //{
+                //    // Add the fetched apps to the TopApps ObservableCollection, ordered by the app's value
+                //    foreach (var app in dashboardData.TopApps.OrderByDescending(x => x.Value))
+                //    {
+                //        _viewModel.TopApps.Add(app);
+                //    }
+                //}
 
-                // Update count after adding items
-                _viewModel.TopAppsCount = _viewModel.TopApps.Count;
+                //// Update count after adding items
+                //_viewModel.TopAppsCount = _viewModel.TopApps.Count;
             }
             catch (Exception ex)
             {
@@ -61,23 +61,6 @@ namespace FocusAssistant.Views
         }
 
         // Simulated API response (replace with real API call)
-        private Task<AnalyticsResponse> FetchAnalyticsDataAsync()
-        {
-            return Task.FromResult(new AnalyticsResponse
-            {
-                Date = "2025-09-07",
-                ProductivityRate = 62.0,
-                RecentInterventions = 456,
-                TotalActivities = 500,
-                TopApps = new Dictionary<string, int>
-                {
-                    { "Chrome", 109 },
-                    { "Microsoft Word", 92 },
-                    { "Slack", 101 },
-                    { "Visual Studio Code", 109 },
-                    { "YouTube", 89 }
-                }
-            });
-        }
+        
     }
 }

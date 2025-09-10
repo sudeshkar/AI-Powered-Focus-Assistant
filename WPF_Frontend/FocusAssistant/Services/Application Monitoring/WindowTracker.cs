@@ -15,22 +15,15 @@ using System.Threading.Tasks;
 
 namespace FocusAssistant.Services.Application_Monitoring
 {
-    public class WindowTracker : IDisposable
+    public class WindowTracker  
     {
         // Dependencies
         private readonly IWindowMonitor _windowMonitor;
         private readonly IIdleMonitor _idleMonitor;
         private readonly ISessionManager _sessionManager;
-        private readonly IProductivityClassifier _productivityClassifier;
-        private readonly IActivityService _activityService;
-        private readonly IFeedbackService _feedbackService;
-        private readonly IActivityManagementService _activityManager;
-        private readonly IBaseService<WorkSession> _userSession;
 
         // Internal state
         private CancellationTokenSource _cts = new CancellationTokenSource();
-        private DateTime _lastSwitchTime;
-        private AppUsage _currentAppUsage;
         private bool _isTracking = false;
 
 
@@ -41,26 +34,13 @@ namespace FocusAssistant.Services.Application_Monitoring
         public WindowTracker(
             IWindowMonitor windowMonitor,
             IIdleMonitor idleMonitor,
-            ISessionManager sessionManager,
-            IProductivityClassifier productivityClassifier,
-            IActivityService activityService,
-            IFeedbackService feedbackService,
-            IActivityManagementService activityManager,
-            IBaseService<WorkSession> userSession
+            ISessionManager sessionManager
         )
         {
             _windowMonitor = windowMonitor ?? throw new ArgumentNullException(nameof(windowMonitor));
             _idleMonitor = idleMonitor ?? throw new ArgumentNullException(nameof(idleMonitor));
             _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
-            _productivityClassifier = productivityClassifier ?? throw new ArgumentNullException(nameof(productivityClassifier));
-            _activityService = activityService ?? throw new ArgumentNullException(nameof(activityService));
-            _feedbackService = feedbackService ?? throw new ArgumentNullException(nameof(feedbackService));
-            _activityManager = activityManager ?? throw new ArgumentNullException(nameof(activityManager));
-            _userSession = userSession ?? throw new ArgumentNullException(nameof(userSession));
 
-            // Subscribe to external services
-            _windowMonitor.WindowChanged += OnWindowChanged;
-            _idleMonitor.IdleStateChanged += OnIdleStateChanged;
 
           
         }
@@ -87,19 +67,19 @@ namespace FocusAssistant.Services.Application_Monitoring
                 
 
                 // Get initial active window
-                var (appName, windowTitle) = _windowMonitor.GetActiveWindow();
-                if (!string.IsNullOrEmpty(appName))
-                {
-                    _currentAppUsage = CreateAppUsage(appName, windowTitle);
-                    _lastSwitchTime = DateTime.Now;
-                    _sessionManager.AddAppUsage(appName, _currentAppUsage);
+                //var (appName, windowTitle) = _windowMonitor.GetActiveWindow();
+                //if (!string.IsNullOrEmpty(appName))
+                //{
+                //    _currentAppUsage = CreateAppUsage(appName, windowTitle);
+                //    _lastSwitchTime = DateTime.Now;
+                //    _sessionManager.AddAppUsage(appName, _currentAppUsage);
 
-                    Console.WriteLine($"✅ Initial app usage detected: {appName}, {windowTitle}");
-                }
-                else
-                {
-                    Console.WriteLine("⚠️ No initial app detected by WindowMonitor");
-                }
+                //    Console.WriteLine($"✅ Initial app usage detected: {appName}, {windowTitle}");
+                //}
+                //else
+                //{
+                //    Console.WriteLine("⚠️ No initial app detected by WindowMonitor");
+                //}
 
                 Console.WriteLine("✅ Window tracking started successfully.");
             }
@@ -124,7 +104,7 @@ namespace FocusAssistant.Services.Application_Monitoring
             try
             {
                 _cts?.Cancel();
-                FinalizeCurrentAppUsage();
+                 
 
                 // Stop monitors asynchronously
                 await Task.WhenAll(
@@ -138,11 +118,8 @@ namespace FocusAssistant.Services.Application_Monitoring
                 
                 await _sessionManager.EndSessionAsync();
 
-                SessionCompleted?.Invoke(this, _sessionManager.cure.AppUsages ?? new List<AppUsage>());
-
                 _cts?.Dispose();
                 _cts = new CancellationTokenSource();
-                _currentAppUsage = null;
 
                 Console.WriteLine("🛑 Window tracking stopped successfully.");
             }
@@ -154,168 +131,168 @@ namespace FocusAssistant.Services.Application_Monitoring
         }
         #endregion
 
-        #region Event Handlers
-        private void OnWindowChanged(object sender, AppWindowChangedEventArgs e)
-        {
-            Console.WriteLine($"🔹 Window changed at {DateTime.Now:HH:mm:ss}: {e.CurrentAppName} - {e.CurrentWindowTitle}");
+        //#region Event Handlers
+        //private void OnWindowChanged(object sender, AppWindowChangedEventArgs e)
+        //{
+        //    Console.WriteLine($"🔹 Window changed at {DateTime.Now:HH:mm:ss}: {e.CurrentAppName} - {e.CurrentWindowTitle}");
 
-            if (!_isTracking || _idleMonitor.IsIdle) return;
+        //    if (!_isTracking || _idleMonitor.IsIdle) return;
 
-            FinalizeCurrentAppUsage();
+        //    FinalizeCurrentAppUsage();
 
-            if (!string.IsNullOrEmpty(e.CurrentAppName))
-            {
-                _currentAppUsage = CreateAppUsage(e.CurrentAppName, e.CurrentWindowTitle);
-                _lastSwitchTime = DateTime.Now;
-                _sessionManager.AddAppUsage(_currentAppUsage);
+        //    if (!string.IsNullOrEmpty(e.CurrentAppName))
+        //    {
+        //        _currentAppUsage = CreateAppUsage(e.CurrentAppName, e.CurrentWindowTitle);
+        //        _lastSwitchTime = DateTime.Now;
+        //        _sessionManager.AddAppUsage(_currentAppUsage);
 
-                Console.WriteLine($"📊 Tracking new app: {e.CurrentAppName}, {e.CurrentWindowTitle}");
-            }
-        }
+        //        Console.WriteLine($"📊 Tracking new app: {e.CurrentAppName}, {e.CurrentWindowTitle}");
+        //    }
+        //}
 
-        private void OnIdleStateChanged(object sender, IdleStateChangedEventArgs e)
-        {
-            if (!_isTracking) return;
+        //private void OnIdleStateChanged(object sender, IdleStateChangedEventArgs e)
+        //{
+        //    if (!_isTracking) return;
 
-            if (e.IsIdle)
-            {
-                FinalizeCurrentAppUsage();
-                Console.WriteLine("⏸ User went idle, pausing tracking...");
-            }
-            else
-            {
-                var (appName, windowTitle) = _windowMonitor.GetActiveWindow();
-                if (!string.IsNullOrEmpty(appName))
-                {
-                    _currentAppUsage = CreateAppUsage(appName, windowTitle);
-                    _sessionManager.AddAppUsage(_currentAppUsage);
-                }
+        //    if (e.IsIdle)
+        //    {
+        //        FinalizeCurrentAppUsage();
+        //        Console.WriteLine("⏸ User went idle, pausing tracking...");
+        //    }
+        //    else
+        //    {
+        //        var (appName, windowTitle) = _windowMonitor.GetActiveWindow();
+        //        if (!string.IsNullOrEmpty(appName))
+        //        {
+        //            _currentAppUsage = CreateAppUsage(appName, windowTitle);
+        //            _sessionManager.AddAppUsage(_currentAppUsage);
+        //        }
 
-                Console.WriteLine("▶️ User active again, resuming tracking...");
-            }
-        }
-        #endregion
+        //        Console.WriteLine("▶️ User active again, resuming tracking...");
+        //    }
+        //}
+         
 
-        #region Internal Event Subscriptions
-        private void HandleAppSwitchedInternal(object sender, AppUsage e)
-        {
-            Console.WriteLine($"[Internal] App switched to: {e.AppName}");
+        //#region Internal Event Subscriptions
+        //private void HandleAppSwitchedInternal(object sender, AppUsage e)
+        //{
+        //    Console.WriteLine($"[Internal] App switched to: {e.AppName}");
 
-            // Example: Update current session
-            if (_sessionManager.CurrentSession != null)
-            {
-                _sessionManager.CurrentSession.LastUsedApp = e.AppName;
-            }
-        }
+        //    // Example: Update current session
+        //    if (_sessionManager.CurrentSession != null)
+        //    {
+        //        _sessionManager.CurrentSession.LastUsedApp = e.AppName;
+        //    }
+        //}
 
-        private void HandleSessionCompletedInternal(object sender, List<AppUsage> appUsages)
-        {
-            Console.WriteLine($"[Internal] Session completed. Total apps tracked: {appUsages.Count}");
-        }
-        #endregion
+        //private void HandleSessionCompletedInternal(object sender, List<AppUsage> appUsages)
+        //{
+        //    Console.WriteLine($"[Internal] Session completed. Total apps tracked: {appUsages.Count}");
+        //}
+        //#endregion
 
-        #region Core Logic
-        private AppUsage CreateAppUsage(string appName, string windowTitle)
-        {
-            return new AppUsage
-            {
-                AppName = appName ?? "Unknown",
-                WindowTitle = windowTitle ?? "Unknown",
-                StartTime = DateTime.Now,
-                IsProductive = _productivityClassifier.IsProductiveActivity(appName ?? "", windowTitle ?? "")
-            };
-        }
+        //#region Core Logic
+        //private AppUsage CreateAppUsage(string appName, string windowTitle)
+        //{
+        //    return new AppUsage
+        //    {
+        //        AppName = appName ?? "Unknown",
+        //        WindowTitle = windowTitle ?? "Unknown",
+        //        StartTime = DateTime.Now,
+        //        IsProductive = _productivityClassifier.IsProductiveActivity(appName ?? "", windowTitle ?? "")
+        //    };
+        //}
 
-        private void FinalizeCurrentAppUsage()
-        {
-            if (_currentAppUsage == null)
-            {
-                Console.WriteLine($"⚠️ No current app usage to finalize at {DateTime.Now:HH:mm:ss}");
-                return;
-            }
+        //private void FinalizeCurrentAppUsage()
+        //{
+        //    if (_currentAppUsage == null)
+        //    {
+        //        Console.WriteLine($"⚠️ No current app usage to finalize at {DateTime.Now:HH:mm:ss}");
+        //        return;
+        //    }
 
-            _currentAppUsage.EndTime = DateTime.Now;
-            _currentAppUsage.Duration = _currentAppUsage.EndTime - _lastSwitchTime;
-            _currentAppUsage.IsProductive = _productivityClassifier.IsProductiveActivity(_currentAppUsage.AppName, _currentAppUsage.WindowTitle);
+        //    _currentAppUsage.EndTime = DateTime.Now;
+        //    _currentAppUsage.Duration = _currentAppUsage.EndTime - _lastSwitchTime;
+        //    _currentAppUsage.IsProductive = _productivityClassifier.IsProductiveActivity(_currentAppUsage.AppName, _currentAppUsage.WindowTitle);
 
-            if (_currentAppUsage.Duration.TotalSeconds >= 1)
-            {
-                // Raise event for external subscribers
-                AppSwitched?.Invoke(this, _currentAppUsage);
+        //    if (_currentAppUsage.Duration.TotalSeconds >= 1)
+        //    {
+        //        // Raise event for external subscribers
+        //        AppSwitched?.Invoke(this, _currentAppUsage);
 
-                Console.WriteLine($"📢 AppSwitched event raised for: {_currentAppUsage.AppName}, Duration: {_currentAppUsage.Duration.TotalSeconds:F2}s");
+        //        Console.WriteLine($"📢 AppSwitched event raised for: {_currentAppUsage.AppName}, Duration: {_currentAppUsage.Duration.TotalSeconds:F2}s");
 
-                // Notify AI
-                Task.Run(() => NotifyAiAsync(_currentAppUsage, _cts.Token));
-            }
+        //        // Notify AI
+        //        Task.Run(() => NotifyAiAsync(_currentAppUsage, _cts.Token));
+        //    }
 
-            _currentAppUsage = null;
-        }
-        #endregion
+        //    _currentAppUsage = null;
+        //}
+        //#endregion
 
-        #region AI Notifications
-        private async Task NotifyAiAsync(AppUsage usage, CancellationToken cancellationToken)
-        {
-            try
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (usage == null) return;
+        //#region AI Notifications
+        //private async Task NotifyAiAsync(AppUsage usage, CancellationToken cancellationToken)
+        //{
+        //    try
+        //    {
+        //        cancellationToken.ThrowIfCancellationRequested();
+        //        if (usage == null) return;
 
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, cts.Token);
+        //        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        //        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, cts.Token);
 
-                var response = await _activityService.SendActivityAsync(usage).WithCancellation(linkedCts.Token);
+        //        var response = await _activityService.SendActivityAsync(usage).WithCancellation(linkedCts.Token);
 
-                if (response.Status == "error" || string.IsNullOrEmpty(response.InterventionMessage))
-                {
-                    Console.WriteLine("⚠️ AI is still learning from your data.");
-                    return;
-                }
+        //        if (response.Status == "error" || string.IsNullOrEmpty(response.InterventionMessage))
+        //        {
+        //            Console.WriteLine("⚠️ AI is still learning from your data.");
+        //            return;
+        //        }
 
-                await _activityManager.LogActivityAsync(usage);
-                AiInterventionReceived?.Invoke(this, response);
-            }
-            catch (OperationCanceledException)
-            {
-                Console.WriteLine("⚠️ AI notification canceled or timed out.");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"❌ AI notification failed: {ex.Message}");
-            }
-        }
-        #endregion
+        //        await _activityManager.LogActivityAsync(usage);
+        //        AiInterventionReceived?.Invoke(this, response);
+        //    }
+        //    catch (OperationCanceledException)
+        //    {
+        //        Console.WriteLine("⚠️ AI notification canceled or timed out.");
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        Console.WriteLine($"❌ AI notification failed: {ex.Message}");
+        //    }
+        //}
+        //#endregion
 
-        #region Dispose
-        public async ValueTask DisposeAsync()
-        {
-            try
-            {
-                if (_isTracking)
-                {
-                    await StopTrackingAsync();
-                }
+        //#region Dispose
+        //public async ValueTask DisposeAsync()
+        //{
+        //    try
+        //    {
+        //        if (_isTracking)
+        //        {
+        //            await StopTrackingAsync();
+        //        }
 
-                // Unsubscribe from events
-                _windowMonitor.WindowChanged -= OnWindowChanged;
-                _idleMonitor.IdleStateChanged -= OnIdleStateChanged;
-                this.AppSwitched -= HandleAppSwitchedInternal;
-                this.SessionCompleted -= HandleSessionCompletedInternal;
+        //        // Unsubscribe from events
+        //        _windowMonitor.WindowChanged -= OnWindowChanged;
+        //        _idleMonitor.IdleStateChanged -= OnIdleStateChanged;
+        //        this.AppSwitched -= HandleAppSwitchedInternal;
+        //        this.SessionCompleted -= HandleSessionCompletedInternal;
 
-                _cts?.Dispose();
-                Console.WriteLine("🗑 WindowTracker disposed.");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"❌ DisposeAsync error: {ex.Message}");
-            }
-        }
+        //        _cts?.Dispose();
+        //        Console.WriteLine("🗑 WindowTracker disposed.");
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        Console.WriteLine($"❌ DisposeAsync error: {ex.Message}");
+        //    }
+        //}
 
-        public void Dispose()
-        {
-            DisposeAsync().GetAwaiter().GetResult();
-        }
-        #endregion
+        //public void Dispose()
+        //{
+        //    DisposeAsync().GetAwaiter().GetResult();
+        //}
+        //#endregion
     }
 
     #region Task Extensions

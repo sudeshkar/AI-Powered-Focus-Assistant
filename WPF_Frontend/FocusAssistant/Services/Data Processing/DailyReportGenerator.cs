@@ -1,9 +1,11 @@
 ﻿using FocusAssistant.Models;
 using FocusAssistant.Models.Response_Models;
 using FocusAssistant.Services.Data_log_and_Save_Repo.Interfaces;
+using FocusAssistant.Services.Datafetch.Interfaces;
 using FocusAssistant.Services.Flask.Interfaces;
 using FocusAssistant.Services.Session.Interfaces;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
@@ -12,72 +14,102 @@ namespace FocusAssistant.Services.Session
 {
     public class DailyReportGenerator : IReportGenerator
     {
-        private readonly ISessionRepository _sessionRepository;
+        private readonly IBaseService<UserSession> _userSession;
         private readonly IFlaskServerManager _flaskServerManager;
         private readonly IAnalyticsService _analyticsService;
 
-        public DailyReportGenerator(ISessionRepository sessionRepository, IFlaskServerManager flaskServerManager, IAnalyticsService analyticsService)
+        public DailyReportGenerator(
+            IBaseService<UserSession> userSession,
+            IFlaskServerManager flaskServerManager,
+            IAnalyticsService analyticsService)
         {
-            _sessionRepository = sessionRepository;
+            _userSession = userSession;
             _flaskServerManager = flaskServerManager;
             _analyticsService = analyticsService;
         }
 
-
+        // Fetch report from Flask API
         public async Task<AnalyticsResponse> GetReportFlask(AnalyticsResponse analyticsResponse)
         {
             try
             {
                 return await _analyticsService.GetAnalyticsAsync();
-                
-               
-
             }
-            catch (Exception ex) {
-
+            catch (Exception ex)
+            {
                 MessageBox.Show(
-                $"An error occurred: {ex.Message}",
-                "Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+                    $"An error occurred: {ex.Message}",
+                    "Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
 
+                // If Flask fails, fallback to local report generation
                 return await GenerateReportInternal(DateTime.Now);
             }
-
         }
 
+        // Generate a local report if Flask is not available
         public async Task<AnalyticsResponse> GenerateReportInternal(DateTime date)
         {
             try
             {
-                var sessions = await _sessionRepository.GetSessionsByDateAsync(date);
-                var totalProductiveTicks = sessions.Sum(s => s.ProductiveTime.Ticks);
-                var totalBreakTicks = sessions.Sum(s => s.BreakTime.Ticks);
+                if (_userSession is not IUserSessionService userSessionService)
+                {
+                    throw new InvalidOperationException("UserSession service does not support GetByDateAsync");
+                }
+
+                // Ensure sessions are generic IEnumerable<UserSession>
+                var sessionsRaw = await userSessionService.GetByDateAsync(date);
+                var sessions = sessionsRaw.Cast<UserSession>().ToList();
+
+                if (!sessions.Any())
+                {
+                    return new AnalyticsResponse
+                    {
+                        Date = date.ToString("yyyy-MM-dd"),
+                        ProductivityRate = 0,
+                        RecentInterventions = 0,
+                        TopApps = new List<string>(),
+                        TotalActivities = 0,
+                        Status = "no_data",
+                        Timestamp = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.ffffff")
+                    };
+                }
+
+                // Calculate productive and break time
+                var totalProductiveTicks = sessions.Sum(s => s.FocusTimeMinutes * TimeSpan.TicksPerMinute);
+                var totalBreakTicks = sessions.Sum(s =>
+                    (s.EndTime - s.StartTime).Ticks - (s.FocusTimeMinutes * TimeSpan.TicksPerMinute));
                 var totalTimeTicks = totalProductiveTicks + totalBreakTicks;
 
                 var productivityRate = totalTimeTicks > 0
                     ? Math.Round((double)totalProductiveTicks / totalTimeTicks * 100, 2)
                     : 0.0;
 
-                var topApps = sessions.SelectMany(s => s.AppUsages)
-                    .GroupBy(a => a.AppName)
-                    .Select(g => new { AppName = g.Key, Duration = (int)g.Sum(a => a.Duration.TotalSeconds) })
-                    .OrderByDescending(a => a.Duration)
+                // Get top 5 most used apps
+                var topApps = sessions
+                    .SelectMany(s => s.MostUsedApps ?? new List<string>())
+                    .GroupBy(a => a)
+                    .OrderByDescending(g => g.Count())
                     .Take(5)
-                    .ToDictionary(a => a.AppName, a => a.Duration);
+                    .Select(g => g.Key)
+                    .ToList();
 
+                // Build final analytics report
                 var report = new AnalyticsResponse
                 {
                     Date = date.ToString("yyyy-MM-dd"),
                     ProductivityRate = productivityRate,
-                    RecentInterventions = sessions.Sum(s => s.Interventions?.Count ?? 0), 
+                    RecentInterventions = sessions.Sum(s => s.DistractionEvents),
                     TopApps = topApps,
-                    TotalActivities = sessions.SelectMany(s => s.AppUsages).Count(),
+                    TotalActivities = sessions.SelectMany(s => s.MostUsedApps ?? new List<string>()).Count(),
                     Status = "success",
                     Timestamp = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.ffffff")
                 };
 
-                report.productivityStreaks = CalculateStreak(sessions.ToList());
+                // Calculate productivity streaks
+                report.productivityStreaks = await CalculateStreak(sessions);
+
                 return report;
             }
             catch (Exception ex)
@@ -88,7 +120,7 @@ namespace FocusAssistant.Services.Session
                     Date = date.ToString("yyyy-MM-dd"),
                     ProductivityRate = 0,
                     RecentInterventions = 0,
-                    TopApps = new Dictionary<string, int>(),
+                    TopApps = new List<string>(),
                     TotalActivities = 0,
                     Status = "error",
                     Timestamp = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.ffffff")
@@ -96,26 +128,33 @@ namespace FocusAssistant.Services.Session
             }
         }
 
-        private int CalculateStreak(IList<WorkSession> sessions)
+        // Calculate productivity streak
+        private async Task<int> CalculateStreak(IList<UserSession> sessions)
         {
-            if (!sessions.Any())
+            if (sessions == null || !sessions.Any())
                 return 0;
 
             // Check if today has productive sessions
-            bool isTodayProductive = sessions.Any(s => s.ProductiveTime > TimeSpan.Zero);
+            bool isTodayProductive = sessions.Any(s => s.FocusTimeMinutes > 0);
             if (!isTodayProductive)
                 return 0;
 
-            // Check previous days for streak (simplified logic)
             int streak = 1;
             var previousDay = sessions.First().StartTime.Date.AddDays(-1);
 
-            // Assuming repository can fetch sessions for previous days
+            if (_userSession is not IUserSessionService userSessionService)
+            {
+                throw new InvalidOperationException("UserSession service does not support GetByDateAsync");
+            }
+
             while (true)
             {
-                var prevSessions = _sessionRepository.GetSessionsByDateAsync(previousDay).Result;
-                if (!prevSessions.Any(s => s.ProductiveTime > TimeSpan.Zero))
+                var prevSessionsRaw = await userSessionService.GetByDateAsync(previousDay);
+                var prevSessions = prevSessionsRaw.Cast<UserSession>().ToList();
+
+                if (!prevSessions.Any(s => s.FocusTimeMinutes > 0))
                     break;
+
                 streak++;
                 previousDay = previousDay.AddDays(-1);
             }
