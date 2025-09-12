@@ -33,6 +33,7 @@ namespace FocusAssistant
                 _trackingViewInstance = _serviceProvider.GetRequiredService<TrackingView>();
                 MainContentFrame.Content = _trackingViewInstance;
 
+
                 Console.WriteLine($"MainWindow initialized with TrackingView at {DateTime.Now:HH:mm:ss.fff}");
             }
             catch (Exception ex)
@@ -121,14 +122,9 @@ namespace FocusAssistant
         {
             try
             {
-                MainContentFrame.Content = new System.Windows.Controls.TextBlock
-                {
-                    Text = "Analytics View\nComing soon...",
-                    FontSize = 24,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    TextAlignment = System.Windows.TextAlignment.Center
-                };
+                var analyticsView = _serviceProvider.GetRequiredService<AnalyticsView>();
+                MainContentFrame.Content = analyticsView;
+                Console.WriteLine("AnalyticsUserControl loaded successfully.");
             }
             catch (Exception ex)
             {

@@ -1,4 +1,5 @@
 ﻿using FocusAssistant.Data;
+using FocusAssistant.Models;
 using FocusAssistant.Services;
 using FocusAssistant.Services.Application_Monitoring;
 using FocusAssistant.Services.Application_Monitoring.Interfaces;
@@ -14,6 +15,7 @@ using FocusAssistant.Services.Flask;
 using FocusAssistant.Services.Flask.Interfaces;
 using FocusAssistant.Services.Session;
 using FocusAssistant.Services.Session.Interfaces;
+using FocusAssistant.SQL_analytics;
 using FocusAssistant.ViewModels;
 using FocusAssistant.Views;
 using Microsoft.EntityFrameworkCore;
@@ -47,6 +49,7 @@ namespace FocusAssistant
                     "FocusAssistant",
                     "focusassistant.db"
                 );
+                Console.WriteLine( dbPath );
                 Directory.CreateDirectory(Path.GetDirectoryName(dbPath));
                 options.UseSqlite($"Data Source={dbPath}")
                     .EnableSensitiveDataLogging()
@@ -56,6 +59,7 @@ namespace FocusAssistant
             // ----------------------
             // Data Services (BaseService implementations)
             // ----------------------
+            services.AddScoped<AnalyticsServiceSQL>();
             services.AddSingleton(typeof(IBaseService<>), typeof(BaseService<>));
             services.AddSingleton<IUserSessionService, UserSessionService>();
             services.AddSingleton<IWorkSessionService, WorkSessionService>();
@@ -63,6 +67,13 @@ namespace FocusAssistant
             services.AddSingleton<IRLInteractionService, RLInteractionService>();
             services.AddSingleton<FlaskIntegrationFacade>();
             services.AddSingleton<ISuggestionsService, SuggestionsService>();
+
+
+
+            //Analytics View
+            services.AddScoped<IBaseService<WorkSession>, WorkSessionService>();
+            services.AddScoped<IBaseService<AppUsage>, AppUsageService>();
+            services.AddScoped<AnalyticsServiceSQL>();
 
             // ----------------------
             // Flask / AI Service
@@ -118,6 +129,8 @@ namespace FocusAssistant
             services.AddTransient<TrackingViewModel>();
             services.AddTransient<DashboardView>();
             services.AddTransient<DashboardViewModel>();
+            services.AddTransient<AnalyticsViewModel>();
+            services.AddTransient<AnalyticsView>();
            
 
 

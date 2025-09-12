@@ -181,6 +181,14 @@ def insights():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route("/reset", methods=["POST"])
+def reset_agent():
+    try:
+        api.rl.reset()   # now this works
+        return jsonify({"message": "RL agent has been reset"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 # ---------------------------------------------------
 
 if __name__ == '__main__':
