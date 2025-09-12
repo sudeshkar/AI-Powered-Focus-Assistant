@@ -1,5 +1,8 @@
 ﻿using FocusAssistant.Data;
 using FocusAssistant.Services.Application_Monitoring;
+using FocusAssistant.Services.Flask;
+using FocusAssistant.Services.Session;
+using FocusAssistant.Services.Session.Interfaces;
 using FocusAssistant.Views;
 using Microsoft.Extensions.DependencyInjection;
 using System;
@@ -11,13 +14,18 @@ namespace FocusAssistant
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly WindowTracker _windowTracker;
+        private readonly ISessionManager _sessionManager;   
+        private readonly FlaskIntegrationFacade _facade;    
         private TrackingView _trackingViewInstance;
+        private RecommendationsView _recommendationsViewInstance;
 
-        public MainWindow(IServiceProvider serviceProvider, WindowTracker windowTracker)
+        public MainWindow(IServiceProvider serviceProvider, WindowTracker windowTracker, ISessionManager sessionManager, FlaskIntegrationFacade facade)
         {
             InitializeComponent();
             _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
             _windowTracker = windowTracker ?? throw new ArgumentNullException(nameof(windowTracker));
+            _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
+            _facade = facade ?? throw new ArgumentNullException(nameof(facade));
 
             try
             {
@@ -151,14 +159,17 @@ namespace FocusAssistant
         {
             try
             {
-                MainContentFrame.Content = new System.Windows.Controls.TextBlock
+                // Option 1: Cached instance (efficient, reuses)
+                if (_recommendationsViewInstance == null)
                 {
-                    Text = "Recommendations View\nComing soon...",
-                    FontSize = 24,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    TextAlignment = System.Windows.TextAlignment.Center
-                };
+                    _recommendationsViewInstance = _serviceProvider.GetRequiredService<RecommendationsView>();
+                }
+                MainContentFrame.Content = _recommendationsViewInstance;
+
+                // Option 2: Fresh instance each time (uncomment if preferred)
+                // MainContentFrame.Content = _serviceProvider.GetRequiredService<RecommendationsView>();
+
+                Console.WriteLine($"RecommendationsView displayed at {DateTime.Now:HH:mm:ss.fff}");
             }
             catch (Exception ex)
             {

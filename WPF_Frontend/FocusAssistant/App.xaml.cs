@@ -61,6 +61,8 @@ namespace FocusAssistant
             services.AddSingleton<IWorkSessionService, WorkSessionService>();
             services.AddSingleton<IAppUsageService, AppUsageService>();
             services.AddSingleton<IRLInteractionService, RLInteractionService>();
+            services.AddSingleton<FlaskIntegrationFacade>();
+            services.AddSingleton<ISuggestionsService, SuggestionsService>();
 
             // ----------------------
             // Flask / AI Service
@@ -68,7 +70,7 @@ namespace FocusAssistant
             services.AddHttpClient();
             services.AddSingleton<IActivityService, FlaskActivityService>();
             services.AddSingleton<IHttpClientWrapper, HttpClientWrapper>(); // if needed by ActivityService
-
+            services.AddSingleton<IFeedbackService, FlaskFeedbackService>();
 
             services.AddSingleton<RuleBasedProductivityStrategy>();
 
@@ -102,6 +104,11 @@ namespace FocusAssistant
 
 
             services.AddSingleton<WindowTracker>();
+            services.AddTransient<RecommendationsView>(provider =>
+                new RecommendationsView(
+                    provider.GetRequiredService<ISessionManager>(),
+                    provider.GetRequiredService<FlaskIntegrationFacade>()
+                ));
 
             // ----------------------
             // Views / ViewModels
@@ -111,6 +118,7 @@ namespace FocusAssistant
             services.AddTransient<TrackingViewModel>();
             services.AddTransient<DashboardView>();
             services.AddTransient<DashboardViewModel>();
+           
 
 
 
@@ -127,6 +135,11 @@ namespace FocusAssistant
             // Resolve and show MainWindow
             var mainWindow = _serviceProvider.GetRequiredService<MainWindow>();
             mainWindow.Show();
+        }
+        protected override async void OnExit(ExitEventArgs e)
+        {
+             
+            base.OnExit(e);
         }
     }
 }

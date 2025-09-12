@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace FocusAssistant.Services.Flask.Interfaces
 {
-    public interface IFlaskServerManager
+    public interface IFlaskServerManager 
     {
         Task<bool> StartServerAsync();
         Task<bool> IsServerHealthyAsync();

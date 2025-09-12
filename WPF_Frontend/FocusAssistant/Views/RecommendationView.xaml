@@ -1,71 +1,211 @@
-﻿<UserControl x:Class="FocusAssistant.Views.RecommendationView"
+﻿<UserControl x:Class="FocusAssistant.Views.RecommendationsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d"
-             d:DesignHeight="450" d:DesignWidth="800">
+             Height="600" Width="800">
 
-    <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
+    <UserControl.Resources>
+        <!-- Your existing styles unchanged... -->
+        <LinearGradientBrush x:Key="PrimaryGradient" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#3d52a0" Offset="0"/>
+            <GradientStop Color="#7091e6" Offset="1"/>
+        </LinearGradientBrush>
 
-        <!-- LEFT -->
-        <StackPanel Grid.Column="0" Margin="10">
-            <TextBlock Text="AI Suggestions" FontWeight="Bold"/>
-            <ItemsControl ItemsSource="{Binding AISuggestions}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <TextBlock Text="{Binding}" Margin="0,2"/>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+        <LinearGradientBrush x:Key="LightGradient" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#ede8f5" Offset="0"/>
+            <GradientStop Color="#adbbda" Offset="1"/>
+        </LinearGradientBrush>
 
-            <TextBlock Text="Most Active Hours" FontWeight="Bold" Margin="0,10,0,0"/>
-            <ItemsControl ItemsSource="{Binding MostActiveHours}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <TextBlock Text="{Binding}" Margin="0,2"/>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+        <LinearGradientBrush x:Key="ButtonGradient" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#7091e6" Offset="0"/>
+            <GradientStop Color="#3d52a0" Offset="1"/>
+        </LinearGradientBrush>
 
-            <TextBlock Text="Productivity Trend" FontWeight="Bold" Margin="0,10,0,0"/>
-            <TextBlock Text="{Binding ProductivityTrend}"/>
+        <LinearGradientBrush x:Key="ButtonHoverGradient" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#8697c4" Offset="0"/>
+            <GradientStop Color="#7091e6" Offset="1"/>
+        </LinearGradientBrush>
 
-            <TextBlock Text="Energy Patterns" FontWeight="Bold" Margin="0,10,0,0"/>
-            <TextBlock Text="{Binding EnergyPatterns}"/>
+        <!-- Drop Shadow Effect -->
+        <DropShadowEffect x:Key="CardShadow" ShadowDepth="4" Direction="315" Color="#33000000" Opacity="0.3" BlurRadius="8"/>
+        <DropShadowEffect x:Key="ButtonShadow" ShadowDepth="2" Direction="315" Color="#33000000" Opacity="0.5" BlurRadius="4"/>
 
-            <TextBlock Text="Optimal Times" FontWeight="Bold" Margin="0,10,0,0"/>
-            <TextBlock Text="{Binding OptimalTimes}"/>
-        </StackPanel>
+        <!-- Modern Button Style -->
+        <Style x:Key="ModernButton" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource ButtonGradient}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="15,8"/>
+            <Setter Property="Margin" Value="5"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Effect" Value="{StaticResource ButtonShadow}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" 
+                                CornerRadius="6" 
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" 
+                                            VerticalAlignment="Center"
+                                            Content="{TemplateBinding Content}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{StaticResource ButtonHoverGradient}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Effect">
+                                    <Setter.Value>
+                                        <DropShadowEffect ShadowDepth="1" Direction="315" Color="#33000000" Opacity="0.4" BlurRadius="2"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-        <!-- RIGHT -->
-        <StackPanel Grid.Column="1" Margin="10">
-            <TextBlock Text="Action Effectiveness" FontWeight="Bold"/>
-            <ItemsControl ItemsSource="{Binding ActionEffectiveness}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <StackPanel Orientation="Horizontal" Margin="0,2">
-                            <TextBlock Text="{Binding Key}" Width="200"/>
-                            <TextBlock Text="{Binding Value.AverageReward,StringFormat=F2}"/>
-                        </StackPanel>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+        <!-- Card Style -->
+        <Style x:Key="CardPanel" TargetType="Border">
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Effect" Value="{StaticResource CardShadow}"/>
+            <Setter Property="Margin" Value="10"/>
+            <Setter Property="Padding" Value="20"/>
+            <Setter Property="Background" Value="White"/>
+        </Style>
 
-            <TextBlock Text="Recent Intervention" FontWeight="Bold" Margin="0,10,0,0"/>
-            <TextBlock Text="{Binding RecentInterventionMessage}" TextWrapping="Wrap"/>
-            <TextBlock Text="{Binding RecentInterventionDetails}" Margin="0,5,0,0" FontStyle="Italic"/>
+        <!-- Text Styles -->
+        <Style x:Key="HeaderText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="24"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Margin" Value="0,0,0,15"/>
+        </Style>
 
-            <TextBlock Text="Q-Value Stats (min / mean / max)" FontWeight="Bold" Margin="0,10,0,0"/>
-            <TextBlock>
-                <Run Text="{Binding QValueStats[0],StringFormat=F3}"/><Run Text=" / "/>
-                <Run Text="{Binding QValueStats[1],StringFormat=F3}"/><Run Text=" / "/>
-                <Run Text="{Binding QValueStats[2],StringFormat=F3}"/>
-            </TextBlock>
-        </StackPanel>
+        <Style x:Key="SectionHeader" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#3d52a0"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+        </Style>
+
+        <Style x:Key="RecommendationTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#3d52a0"/>
+            <Setter Property="Margin" Value="0,0,0,5"/>
+        </Style>
+
+        <Style x:Key="RecommendationText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="#5a6b8a"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="LineHeight" Value="16"/>
+        </Style>
+
+        <!-- ListBox Item Template for Suggestions/Hours -->
+        <DataTemplate x:Key="ListItemTemplate">
+            <StackPanel Margin="0,2">
+                <TextBlock Text="{Binding}" Style="{StaticResource RecommendationText}"/>
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid Background="{StaticResource LightGradient}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header Section -->
+        <Border Grid.Row="0" Background="{StaticResource PrimaryGradient}" Style="{StaticResource CardPanel}" Margin="10,10,10,5">
+            <StackPanel>
+                <TextBlock Text="💡 AI Productivity Recommendations" Style="{StaticResource HeaderText}"/>
+                <Button Content="🔄 Refresh Suggestions" Command="{Binding RefreshCommand}" Style="{StaticResource ModernButton}" Width="160" HorizontalAlignment="Right"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Content: Multiple Cards -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="10,5,10,10">
+            <StackPanel>
+                <!-- AI Interventions Card -->
+                <Border Style="{StaticResource CardPanel}">
+                    <StackPanel>
+                        <TextBlock Text="🤖 AI Interventions" Style="{StaticResource SectionHeader}"/>
+                        <Border Background="#fef2f2" BorderBrush="#fecaca" BorderThickness="1" CornerRadius="8" Padding="15" Margin="0,0,0,10">
+                            <StackPanel>
+                                <TextBlock Text="{Binding RecentInterventionMessage}" Style="{StaticResource RecommendationTitle}"/>
+                                <TextBlock Text="{Binding RecentInterventionDetails}" Style="{StaticResource RecommendationText}" Margin="0,0,0,10"/>
+                                <Button Content="Take Action" Command="{Binding TakeActionCommand}" Style="{StaticResource ModernButton}" HorizontalAlignment="Left"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <!-- AI Suggestions Card -->
+                <Border Style="{StaticResource CardPanel}">
+                    <StackPanel>
+                        <TextBlock Text="💭 AI Suggestions" Style="{StaticResource SectionHeader}"/>
+                        <ListBox ItemsSource="{Binding AISuggestions}" ItemTemplate="{StaticResource ListItemTemplate}" Height="100"/>
+                        <TextBlock Text="{Binding ProductivityTrend}" Style="{StaticResource RecommendationText}" Margin="0,10,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Most Active Hours Card -->
+                <Border Style="{StaticResource CardPanel}">
+                    <StackPanel>
+                        <TextBlock Text="⏰ Most Active Hours" Style="{StaticResource SectionHeader}"/>
+                        <ListBox ItemsSource="{Binding MostActiveHours}" ItemTemplate="{StaticResource ListItemTemplate}" Height="80"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Action Effectiveness Card -->
+                <Border Style="{StaticResource CardPanel}">
+                    <StackPanel>
+                        <TextBlock Text="📊 Action Effectiveness" Style="{StaticResource SectionHeader}"/>
+                        <ItemsControl ItemsSource="{Binding ActionEffectiveness}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Margin="0,2">
+                                        <TextBlock Text="{Binding Key}" Width="150" Style="{StaticResource RecommendationTitle}"/>
+                                        <TextBlock Text="{Binding Value.AverageReward, StringFormat='Avg Reward: {0:F2}'}" Style="{StaticResource RecommendationText}"/>
+                                        <TextBlock Text="{Binding Value.SuccessRate, StringFormat='Success: {0:P0}'}" Style="{StaticResource RecommendationText}"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- Circadian Insights Card -->
+                <Border Style="{StaticResource CardPanel}">
+                    <StackPanel>
+                        <TextBlock Text="🌙 Circadian Insights" Style="{StaticResource SectionHeader}"/>
+                        <TextBlock Text="{Binding EnergyPatterns}" Style="{StaticResource RecommendationText}"/>
+                        <TextBlock Text="{Binding OptimalTimes}" Style="{StaticResource RecommendationText}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Q-Value Stats Card -->
+                <Border Style="{StaticResource CardPanel}">
+                    <StackPanel>
+                        <TextBlock Text="🧠 Q-Value Statistics" Style="{StaticResource SectionHeader}"/>
+                        <ItemsControl ItemsSource="{Binding QValueStats}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding StringFormat='Q: {0:F3}'}" Style="{StaticResource RecommendationText}" Margin="0,1"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="{Binding QValueStd, StringFormat='Std Dev: {0:F3}'}" Style="{StaticResource RecommendationText}" Margin="0,5,0,0"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
     </Grid>
 </UserControl>

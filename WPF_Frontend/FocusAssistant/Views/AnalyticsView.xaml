@@ -1,0 +1,28 @@
+﻿<Window x:Class="FocusAssistant.Views.AnalyticsView"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:FocusAssistant.Views"
+        mc:Ignorable="d"
+        Title="AnalyticsView" Height="450" Width="800">
+    <Grid>
+        <StackPanel>
+            <TextBlock Text="{Binding ProductivityRate, StringFormat='Today: {0}%'}" FontSize="48" HorizontalAlignment="Center"/>
+            <ProgressBar Value="{Binding ProductivityRate}" Maximum="100" Height="20"/>
+            <ListView ItemsSource="{Binding TopApps}" Height="150">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Key}" Width="150"/>
+                            <!-- App name -->
+                            <ProgressBar Value="{Binding Value}" Maximum="10" Width="100"/>
+                            <!-- Usage count -->
+                        </StackPanel>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+            <Button Content="Refresh" Command="{Binding RefreshCommand}"/>
+        </StackPanel>
+    </Grid>
+</Window>

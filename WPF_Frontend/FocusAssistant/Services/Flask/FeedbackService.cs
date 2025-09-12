@@ -23,8 +23,9 @@ namespace FocusAssistant.Services.Flask
             {
                 var json = JsonSerializer.Serialize(feedback);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
-                var response = await _httpClient.PostAsync("/api/feedback", content);
+                var response = await _httpClient.PostAsync("http://127.0.0.1:5000/feedback", content);
                 response.EnsureSuccessStatusCode();
+                Console.WriteLine(response.StatusCode + "Successfully submitted feedback to RL");
             }
             catch (Exception ex)
             {

@@ -22,18 +22,5 @@ namespace FocusAssistant.Models.Response_Models
         [JsonPropertyName("productivity_change")]
         public int ProductivityChange { get; set; }
 
-        [JsonPropertyName("app_name")]
-        public string AppName { get; set; }
-
-        [JsonPropertyName("window_title")]
-        public string WindowTitle { get; set; }
-
-        [JsonPropertyName("is_productive")]
-        public bool IsProductive { get; set; }
-
-        [JsonPropertyName("feedback")]
-        public string FeedbackText {  get; set; }
-
-
     }
 }

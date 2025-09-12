@@ -18,7 +18,7 @@ namespace FocusAssistant.Services.Flask
         {
             try
             {
-                var response = await _httpClient.GetAsync("/api/analytics");
+                var response = await _httpClient.GetAsync("http://127.0.0.1:5000/analytics");
                 response.EnsureSuccessStatusCode();
                 var responseJson = await response.Content.ReadAsStringAsync();
                 return JsonSerializer.Deserialize<AnalyticsResponse>(responseJson);
@@ -34,7 +34,7 @@ namespace FocusAssistant.Services.Flask
         {
             try
             {
-                var response = await _httpClient.GetAsync("/api/insights");
+                var response = await _httpClient.GetAsync("http://127.0.0.1:5000/insights");
                 response.EnsureSuccessStatusCode();
                 var responseJson = await response.Content.ReadAsStringAsync();
                 return JsonSerializer.Deserialize<InsightsResponse>(responseJson);

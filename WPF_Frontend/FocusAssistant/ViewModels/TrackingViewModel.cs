@@ -1,4 +1,5 @@
-﻿using FocusAssistant.Models;
+﻿using FocusAssistant.Enums;
+using FocusAssistant.Models;
 using FocusAssistant.Models.Response_Models;
 using FocusAssistant.Services.Application_Monitoring;
 using FocusAssistant.Services.Application_Monitoring.Interfaces;
@@ -6,6 +7,7 @@ using FocusAssistant.Services.Flask.Interfaces;
 using FocusAssistant.Services.Interfaces;
 using FocusAssistant.Services.Models.Events;
 using FocusAssistant.Services.Session.Interfaces;
+using FocusAssistant.Views;
 using MailChimp.Net.Models;
 using OpenTK.Platform;
 using System;
@@ -14,7 +16,9 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Input;
+using System.Windows.Threading;
 
 namespace FocusAssistant.ViewModels
 {
@@ -40,19 +44,21 @@ namespace FocusAssistant.ViewModels
         private readonly IWindowMonitor _windowMonitor;
         private readonly ISessionManager _sessionManager;
         public event EventHandler<ActivityResponse>? AiInterventionOccurred;
+        private readonly IFeedbackService _feedbackService;
 
         public TrackingViewModel(
             WindowTracker windowTracker,
             IAnalyticsService analyticsService,
             IReportGenerator reportGenerator,
             IWindowMonitor windowMonitor,
-            ISessionManager sessionManager)
+            ISessionManager sessionManager,IFeedbackService feedbackService)
         {
             _windowTracker = windowTracker;
             _analyticsService = analyticsService;
             _reportGenerator = reportGenerator;
             _windowMonitor = windowMonitor;
             _sessionManager = sessionManager;
+            _feedbackService = feedbackService;
 
             // Initialize collections
             ActivityLog = new ObservableCollection<ActivityLogItem>();
@@ -74,11 +80,31 @@ namespace FocusAssistant.ViewModels
             
             _windowMonitor.WindowChanged += OnWindowChanged;
             _sessionManager.AiInterventionReceived += OnAiInterventionReceived;
+           
         }
 
         private void OnAiInterventionReceived(object? sender, ActivityResponse e)
         {
-            AiInterventionOccurred?.Invoke(this, e);
+            // Early skip for invalid responses to prevent empty popups/logs
+            if (e == null || e.InterventionId == null || string.IsNullOrEmpty(e.InterventionMessage))
+            {
+                Console.WriteLine("Skipping intervention: Invalid response (null ID or empty message)");
+                return;
+            }
+
+            AiInterventionOccurred?.Invoke(this, e);  // Forward to UI layer for handling
+        }
+
+
+        public void HandleUserAction(ActivityResponse e, AiUserAction action)
+        {
+            Console.WriteLine($"User responded: {action} for '{e.InterventionMessage ?? "No message"}'");
+            // TODO: Send this data to your backend or RL service
+            // Example:
+            // await _sessionManager.SaveUserActionAsync(response, action);
+
+            // Optional: Update UI
+            // _viewModel.StatusText = $"Last action: {action}";
         }
 
         #region Properties
@@ -167,7 +193,7 @@ namespace FocusAssistant.ViewModels
                 await _windowTracker.StartTrackingAsync();
 
                 // Load initial analytics
-                await LoadAnalyticsAsync();
+               // await LoadAnalyticsAsync();
             }
             catch (Exception ex)
             {
@@ -198,20 +224,23 @@ namespace FocusAssistant.ViewModels
         {
             try
             {
-                var analytics = await _analyticsService.GetAnalyticsAsync();
+                
                 var report = await _reportGenerator.GetReportFlask();
 
-                ProductivityScore = $"{analytics.ProductivityRate:F1}%";
+                ProductivityScore = $"{report.ProductivityRate:F1}%";
                 RecentInterventions = $"{report.RecentInterventions:F1}h";
                 AIStatus = report.Status ?? "Active";
                 Date = report.Date;
                 TopApps = report.TopApps ?? new List<string>();
                 TotalActivities = ActivityLog.Count.ToString();
+                Console.WriteLine("Flask request loaded");
+                
             }
             catch (Exception ex)
             {
                 StatusText = $"Error loading analytics: {ex.Message}";
                 AIStatus = "Error";
+                Console.WriteLine("Flask request loaded failed");
             }
         }
         #endregion
@@ -245,7 +274,7 @@ namespace FocusAssistant.ViewModels
         #endregion
 
         #region Public Methods
-        public async Task RefreshDataAsync()
+        public async void RefreshDataAsync()
         {
             await LoadAnalyticsAsync();
         }

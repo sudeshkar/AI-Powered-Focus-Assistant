@@ -9,9 +9,11 @@ using FocusAssistant.Services.Datafetch.Interfaces;
 using FocusAssistant.Services.Flask.Interfaces;
 using FocusAssistant.Services.Models.Events;
 using FocusAssistant.Services.Session.Interfaces;
+using FocusAssistant.Views;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows;
 
@@ -34,6 +36,9 @@ namespace FocusAssistant.Services.Session
         private readonly object _sessionLock = new object();
         public List<WorkSession> TodaySessions =>
             _allWorkSessions.Where(s => s.StartTime.Date == DateTime.Today).ToList();
+
+        private DateTime _lastActivitySentTime = DateTime.MinValue;
+        private readonly TimeSpan _activityCooldown = TimeSpan.FromSeconds(5);
 
         private readonly IBaseService<WorkSession> _workSessionService;
         private readonly IBaseService<AppUsage> _appUsageService;
@@ -161,16 +166,46 @@ namespace FocusAssistant.Services.Session
                     IsProductive = _ruleBasedProductivityStrategy.IsProductive(e.CurrentAppName, e.CurrentWindowTitle)
                 };
             }
+            // ===== Debounce RL Requests =====
+            if (DateTime.Now - _lastActivitySentTime < _activityCooldown)
+            {
+                Console.WriteLine("Skipping AI call due to cooldown...");
+                return;
+            }
+            _lastActivitySentTime = DateTime.Now;
 
-            // Notify AI asynchronously
+            // Notify RL asynchronously
             var activityRequest = new ActivityRequest
             {
                 AppName = _currentAppUsage.AppName,
                 WindowTitle = _currentAppUsage.WindowTitle,
                 IsProductive = _currentAppUsage.IsProductive
             };
-            var response = await _rlService.SendActivityAsync(activityRequest);
-            AiInterventionReceived?.Invoke(this, response);
+
+            try
+            {
+                var response = await _rlService.SendActivityAsync(activityRequest);
+
+                // FIX: Validate before invoking (prevents null ID popups).
+                if (response?.InterventionId == null || string.IsNullOrEmpty(response.InterventionMessage))
+                {
+                    Console.WriteLine("Skipping intervention: Invalid response from AI service");
+                    return;
+                }
+
+                Console.WriteLine($"AI Response received: ID={response.InterventionId}");  // FIX: Add success log.
+                AiInterventionReceived?.Invoke(this, response);
+            }
+            catch (Exception ex) when (ex.Message.Contains("refused") || ex is HttpRequestException)  // FIX: Specific catch for network errors.
+            {
+                Console.WriteLine($"AI service unavailable: {ex.Message}. Skipping intervention.");
+                // Optional: Add retry logic here if needed.
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Unexpected error in AI call: {ex.Message}");
+            }
+
         }
 
 
