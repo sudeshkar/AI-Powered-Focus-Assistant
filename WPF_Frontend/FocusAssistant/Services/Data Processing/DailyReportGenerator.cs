@@ -29,7 +29,7 @@ namespace FocusAssistant.Services.Session
         }
 
         // Fetch report from Flask API
-        public async Task<AnalyticsResponse> GetReportFlask(AnalyticsResponse analyticsResponse)
+        public async Task<AnalyticsResponse> GetReportFlask()
         {
             try
             {
@@ -62,19 +62,6 @@ namespace FocusAssistant.Services.Session
                 var sessionsRaw = await userSessionService.GetByDateAsync(date);
                 var sessions = sessionsRaw.Cast<UserSession>().ToList();
 
-                if (!sessions.Any())
-                {
-                    return new AnalyticsResponse
-                    {
-                        Date = date.ToString("yyyy-MM-dd"),
-                        ProductivityRate = 0,
-                        RecentInterventions = 0,
-                        TopApps = new List<string>(),
-                        TotalActivities = 0,
-                        Status = "no_data",
-                        Timestamp = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.ffffff")
-                    };
-                }
 
                 // Calculate productive and break time
                 var totalProductiveTicks = sessions.Sum(s => s.FocusTimeMinutes * TimeSpan.TicksPerMinute);

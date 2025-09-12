@@ -31,6 +31,7 @@ namespace FocusAssistant.Services.Session
         public event EventHandler<UserSession> SessionEnded;
         
         public bool IsSessionActive => _currentUserSession != null;
+        private readonly object _sessionLock = new object();
         public List<WorkSession> TodaySessions =>
             _allWorkSessions.Where(s => s.StartTime.Date == DateTime.Today).ToList();
 
@@ -42,6 +43,8 @@ namespace FocusAssistant.Services.Session
         private readonly RuleBasedProductivityStrategy _ruleBasedProductivityStrategy;
         private readonly IIdleMonitor _idleMonitor;
         private DateTime? _breakStartTime;
+        public event EventHandler<ActivityResponse>? AiInterventionReceived;
+
 
 
 
@@ -130,34 +133,46 @@ namespace FocusAssistant.Services.Session
             _currentAppUsage = null;
         }
 
+
         private async void OnWindowChangedAsync(object? sender, AppWindowChangedEventArgs e)
         {
             if (_currentWorkSession == null) return;
 
-            // Close previous app usage
-            if (_currentAppUsage != null)
+            lock (_sessionLock)
             {
-                _currentAppUsage.EndTime = e.ChangeTime;
-                _currentAppUsage.Duration = _currentAppUsage.EndTime - _currentAppUsage.StartTime;
-                _currentWorkSession.AppUsages.Add(_currentAppUsage);
+                // Finalize previous usage
+                if (_currentAppUsage != null)
+                {
+                    _currentAppUsage.EndTime = e.ChangeTime;
+                    _currentAppUsage.Duration = _currentAppUsage.EndTime - _currentAppUsage.StartTime;
+
+                    // Add finalized usage to session list
+                    _currentWorkSession.AppUsages.Add(_currentAppUsage);
+                    Console.WriteLine("Onwindow change appusage added");
+                }
+
+                // Create a new usage for the new window
+                _currentAppUsage = new AppUsage
+                {
+                    wID = _currentWorkSession.wID,
+                    AppName = e.CurrentAppName,
+                    WindowTitle = e.CurrentWindowTitle,
+                    StartTime = e.ChangeTime,
+                    IsProductive = _ruleBasedProductivityStrategy.IsProductive(e.CurrentAppName, e.CurrentWindowTitle)
+                };
             }
 
-            // Create new app usage
-            var newAppUsage = new AppUsage
+            // Notify AI asynchronously
+            var activityRequest = new ActivityRequest
             {
-                wID = _currentWorkSession.wID,
-                AppName = e.CurrentAppName,
-                WindowTitle = e.CurrentWindowTitle,
-                StartTime = e.ChangeTime,
-                IsProductive = _ruleBasedProductivityStrategy.IsProductive(e.CurrentAppName, e.CurrentWindowTitle)
+                AppName = _currentAppUsage.AppName,
+                WindowTitle = _currentAppUsage.WindowTitle,
+                IsProductive = _currentAppUsage.IsProductive
             };
-
-            await _appUsageService.CreateAsync(newAppUsage);
-            _currentAppUsage = newAppUsage;
-
-            
-            await _rlService.SendActivityAsync(_currentAppUsage);
+            var response = await _rlService.SendActivityAsync(activityRequest);
+            AiInterventionReceived?.Invoke(this, response);
         }
+
 
         public async Task EndSessionAsync()
         {
@@ -174,7 +189,19 @@ namespace FocusAssistant.Services.Session
             }
             foreach (var usage in _currentWorkSession.AppUsages)
             {
-                await _appUsageService.CreateAsync(usage);
+                try
+                {
+
+                    if (usage.aID == 0) // ensure EF Core treats it as new
+                    {
+                        await _appUsageService.CreateAsync(usage);
+                        Console.WriteLine("endsession adding appusage");
+                    }
+                }
+                catch (Exception ex) {
+                    Console.WriteLine($"❌ Database error: {ex.Message}, Inner: {ex.InnerException?.Message}");
+                    throw;
+                }
                 
             }
             // Finalize work session
@@ -185,6 +212,7 @@ namespace FocusAssistant.Services.Session
             // Finalize user session
             _currentUserSession.EndTime = DateTime.Now;
             await _userSessionService.UpdateAsync(_currentUserSession);
+            Console.WriteLine("finalized and saved work session");
 
             SessionEnded?.Invoke(this, _currentUserSession);
 
@@ -196,24 +224,52 @@ namespace FocusAssistant.Services.Session
         {
             if (IsSessionActive)
             {
-                Console.WriteLine("⚠️ Session already active. Ending current session first.");
-                await EndSessionAsync();
+                Console.WriteLine("⚠️ Session already active. Attempting to end current session first.");
+                try
+                {
+                    await EndSessionAsync();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"❌ Failed to end active session: {ex.Message}. Forcing cleanup.");
+                    _currentUserSession = null;
+                    _currentWorkSession = null;
+                    _currentAppUsage = null;
+                }
             }
 
-
-            _currentUserSession = new UserSession();
-            _currentWorkSession = new WorkSession
+            // Step 1: Create the parent UserSession
+            _currentUserSession = new UserSession
             {
-                
                 StartTime = DateTime.Now
             };
 
+            // Step 2: Create the WorkSession and LINK it to the UserSession
+            _currentWorkSession = new WorkSession
+            {
+                StartTime = DateTime.Now,
+                UserSession = _currentUserSession,
+                TopAppsJson = "[]"
+
+            };
+
             Console.WriteLine($"✅ Session started: {_currentUserSession.SessionId}");
-            await _userSessionService.CreateAsync(_currentUserSession);
-            await _workSessionService.CreateAsync(_currentWorkSession);
+
+            try
+            {
+                // Save both together so EF Core automatically sets the FK
+                await _userSessionService.CreateAsync(_currentUserSession);
+                await _workSessionService.CreateAsync(_currentWorkSession);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Database error: {ex.Message}, Inner: {ex.InnerException?.Message}");
+                throw;
+            }
 
             SessionStarted?.Invoke(this, _currentUserSession);
         }
+
         public void AddAppUsage(string appName, TimeSpan durationMinutes)
         {
             if (_currentWorkSession == null) return;

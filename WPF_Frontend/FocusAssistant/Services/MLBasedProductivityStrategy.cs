@@ -29,35 +29,7 @@ namespace FocusAssistant.Services
                 if (category.Value.Contains(appName.ToLower())) return category.Key;
             return "Other";
         }
-        public async Task<bool> IsProductiveAsync(string appName, string windowTitle)
-        {
-            if (_mlService != null)
-            {
-                try
-                {
-                    var activity = new AppUsage
-                    {
-                        AppName = appName,
-                        WindowTitle = windowTitle,
-                        StartTime = DateTime.Now
-                    };
-
-                    var prediction = await _mlService.SendActivityAsync(activity);
-                    if (prediction != null && prediction.Status == "ok")
-                        return prediction.DistractionRisk < 0.5;
-
-                    // fallback if ML returns error
-                    Console.WriteLine($"⚠️ ML returned error: {prediction?.InterventionMessage}");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"⚠️ ML prediction failed, falling back to rules: {ex.Message}");
-                    // Fallback to rule-based approach
-                }
-            }
-
-            return IsProductiveRuleBased(appName, windowTitle);
-        }
+         
         private bool IsProductiveRuleBased(string appName, string windowTitle)
         {
             bool isProductiveApp = _config.ProductiveApps.Values.Any(apps =>
@@ -93,6 +65,11 @@ namespace FocusAssistant.Services
         }
 
         public double GetProductivityScore(string appName, string windowTitle)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<bool> IsProductiveAsync(string appName, string windowTitle)
         {
             throw new NotImplementedException();
         }

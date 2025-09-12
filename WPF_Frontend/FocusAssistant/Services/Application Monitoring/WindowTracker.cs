@@ -111,9 +111,7 @@ namespace FocusAssistant.Services.Application_Monitoring
                     Task.Run(() => _windowMonitor.StopMonitoring()),
                     Task.Run(() => _idleMonitor.StopMonitoring())
                 );
-
-                _windowMonitor.StopMonitoring();
-                _idleMonitor.StopMonitoring() ;
+                 
 
                 
                 await _sessionManager.EndSessionAsync();

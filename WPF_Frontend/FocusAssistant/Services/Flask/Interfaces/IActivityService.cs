@@ -10,6 +10,6 @@ namespace FocusAssistant.Services.Flask.Interfaces
 {
     public interface IActivityService
     {
-        Task<ActivityResponse> SendActivityAsync(AppUsage appUsage);
+        Task<ActivityResponse> SendActivityAsync(ActivityRequest activityRequest);
     }
 }

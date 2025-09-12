@@ -1,7 +1,9 @@
 ﻿using FocusAssistant.Data;
 using FocusAssistant.Models;
 using FocusAssistant.Services.Datafetch.Interfaces;
+using Microsoft.EntityFrameworkCore;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -13,6 +15,12 @@ namespace FocusAssistant.Services.Datafetch
     {
         public WorkSessionService(FocusAssistantDbContext context) : base(context)
         {
+        }
+        public async Task<IEnumerable<WorkSession>> GetByDateAsync(DateTime date)
+        {
+            return await _dbSet
+           .Where(s => s.StartTime.Date == date.Date)
+           .ToListAsync();
         }
     }
 }

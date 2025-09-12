@@ -1,4 +1,5 @@
-﻿using System;
+﻿using FocusAssistant.Models.Response_Models;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -19,10 +20,10 @@ namespace FocusAssistant
     /// </summary>
     public partial class AiInterventionWindow : Window
     {
-        public AiInterventionWindow(string message)
+        public AiInterventionWindow(ActivityResponse activityResponse)
         {
             InitializeComponent();
-            AiTextBlock.Text = message;
+            AiTextBlock.Text = activityResponse.InterventionMessage;
 
             // Optional: auto-close after 5 seconds
             var timer = new System.Windows.Threading.DispatcherTimer

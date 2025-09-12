@@ -17,16 +17,23 @@ namespace FocusAssistant.Services.Flask
             _httpClient = httpClient;
         }
 
-        public async Task<ActivityResponse> SendActivityAsync(AppUsage appUsage)
+        public async Task<ActivityResponse> SendActivityAsync(ActivityRequest activityRequest)
         {
             try
             {
-                var json = JsonSerializer.Serialize(appUsage);
+                var json = JsonSerializer.Serialize(activityRequest);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
-                var response = await _httpClient.PostAsync("/api/activity", content);
+                var response = await _httpClient.PostAsync("http://127.0.0.1:5000/activity", content);
                 response.EnsureSuccessStatusCode();
                 var responseJson = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<ActivityResponse>(responseJson);
+                if (responseJson != null)
+                {
+                    return JsonSerializer.Deserialize<ActivityResponse>(responseJson);
+                }
+                return new ActivityResponse
+                {
+                    Status ="Error"
+                };
             }
             catch (Exception ex)
             {

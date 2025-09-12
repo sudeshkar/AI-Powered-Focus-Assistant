@@ -16,7 +16,7 @@ namespace FocusAssistant.Models
         public DateTime EndTime { get; set; }
         public int FocusTimeMinutes { get; set; }
         public int DistractionEvents { get; set; }
-        public string MostUsedAppsJson { get; set; }
+        public string MostUsedAppsJson { get; set; }="[]";
         [NotMapped]
         public List<string> MostUsedApps
         {
@@ -28,6 +28,7 @@ namespace FocusAssistant.Models
         }
         public double ProductivityScore { get; set; }
 
+        [System.Text.Json.Serialization.JsonIgnore]
         public List<WorkSession> WorkSessions { get; set; } = new List<WorkSession>();
     }
 

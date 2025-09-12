@@ -21,7 +21,7 @@ namespace FocusAssistant.Services.Export_Services
                 (ExportType.Sessions, ExportFormat.Json) => _serviceProvider.GetRequiredService<SessionsJsonExporter>(),
 
                 (ExportType.DailyReports, ExportFormat.Csv) => _serviceProvider.GetRequiredService<DailyReportsCsvExporter>(),
-                (ExportType.DailyReports, ExportFormat.Json) => _serviceProvider.GetRequiredService<DailyReportsJsonExporter>(),
+               // (ExportType.DailyReports, ExportFormat.Json) => _serviceProvider.GetRequiredService<DailyReportsJsonExporter>(),
 
                 (ExportType.AppUsage, ExportFormat.Csv) => _serviceProvider.GetRequiredService<AppUsageCsvExporter>(),
 

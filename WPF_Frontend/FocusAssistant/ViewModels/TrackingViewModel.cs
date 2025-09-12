@@ -6,6 +6,7 @@ using FocusAssistant.Services.Flask.Interfaces;
 using FocusAssistant.Services.Interfaces;
 using FocusAssistant.Services.Models.Events;
 using FocusAssistant.Services.Session.Interfaces;
+using MailChimp.Net.Models;
 using OpenTK.Platform;
 using System;
 using System.Collections.Generic;
@@ -31,22 +32,27 @@ namespace FocusAssistant.ViewModels
         private string _currentApp;
         private string _currentWindow;
         private string _windowStatusText;
+        public ActivityResponse AiIntervention { get; private set; }
 
         private readonly IAnalyticsService _analyticsService;
         private readonly IReportGenerator _reportGenerator;
         private readonly WindowTracker _windowTracker;
         private readonly IWindowMonitor _windowMonitor;
+        private readonly ISessionManager _sessionManager;
+        public event EventHandler<ActivityResponse>? AiInterventionOccurred;
 
         public TrackingViewModel(
             WindowTracker windowTracker,
             IAnalyticsService analyticsService,
             IReportGenerator reportGenerator,
-            IWindowMonitor windowMonitor)
+            IWindowMonitor windowMonitor,
+            ISessionManager sessionManager)
         {
             _windowTracker = windowTracker;
             _analyticsService = analyticsService;
             _reportGenerator = reportGenerator;
             _windowMonitor = windowMonitor;
+            _sessionManager = sessionManager;
 
             // Initialize collections
             ActivityLog = new ObservableCollection<ActivityLogItem>();
@@ -66,7 +72,13 @@ namespace FocusAssistant.ViewModels
 
           
             
-            _windowMonitor.WindowChanged += OnWindowChanged; 
+            _windowMonitor.WindowChanged += OnWindowChanged;
+            _sessionManager.AiInterventionReceived += OnAiInterventionReceived;
+        }
+
+        private void OnAiInterventionReceived(object? sender, ActivityResponse e)
+        {
+            AiInterventionOccurred?.Invoke(this, e);
         }
 
         #region Properties
@@ -187,7 +199,7 @@ namespace FocusAssistant.ViewModels
             try
             {
                 var analytics = await _analyticsService.GetAnalyticsAsync();
-                var report = await _reportGenerator.GetReportFlask(analytics);
+                var report = await _reportGenerator.GetReportFlask();
 
                 ProductivityScore = $"{analytics.ProductivityRate:F1}%";
                 RecentInterventions = $"{report.RecentInterventions:F1}h";

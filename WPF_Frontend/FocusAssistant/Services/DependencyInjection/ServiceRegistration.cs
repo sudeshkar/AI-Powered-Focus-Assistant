@@ -1,4 +1,6 @@
-﻿using FocusAssistant.Services.Application_Monitoring;
+﻿using FocusAssistant.Data;
+using FocusAssistant.Models;
+using FocusAssistant.Services.Application_Monitoring;
 using FocusAssistant.Services.Application_Monitoring.Interfaces;
 using FocusAssistant.Services.Config;
 using FocusAssistant.Services.Config.interfaces;
@@ -9,6 +11,8 @@ using FocusAssistant.Services.Data_log_and_Save_Repo.Interfaces;
 using FocusAssistant.Services.Data_log_and_Save_Repo.Logging_Implementations;
 using FocusAssistant.Services.Data_log_and_Save_Repo.Repository_Implementations;
 using FocusAssistant.Services.Data_log_and_Save_Repo.Service_Layer;
+using FocusAssistant.Services.Datafetch;
+using FocusAssistant.Services.Datafetch.Interfaces;
 using FocusAssistant.Services.Export_Services;
 using FocusAssistant.Services.Export_Services.Interfaces;
 using FocusAssistant.Services.Flask;
@@ -17,6 +21,9 @@ using FocusAssistant.Services.Interfaces;
 using FocusAssistant.Services.ML;
 using FocusAssistant.Services.Session;
 using FocusAssistant.Services.Session.Interfaces;
+using FocusAssistant.ViewModels;
+using FocusAssistant.Views;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System;
@@ -28,48 +35,26 @@ namespace FocusAssistant.Services.DependencyInjection
     {
         public static IServiceCollection AddFocusAssistantServices(this IServiceCollection services)
         {
-            Console.WriteLine($"Registering FocusAssistant services at {DateTime.Now:HH:mm:ss.fff}");
-
-            // Configuration Services (Singleton - app-wide settings)
+            // ------------------------
+            // Configuration Services
+            // ------------------------
             services.AddSingleton<IFocusAssistantConfig, FocusAssistantConfig>();
             services.AddSingleton<IAppCategorizationConfig, AppCategorizationConfig>();
             services.AddSingleton<FlaskConfiguration>();
 
-            // Core Infrastructure Services
-            services.AddCoreInfrastructure();
+            // Inside ConfigureServices / AddFocusAssistantServices
+            services.AddDbContext<FocusAssistantDbContext>(options =>
+            {
+                options.UseSqlite("Data Source=FocusAssistant.db"); // or SQL Server if needed
+            });
 
-            // Data & Logging Services
-            services.AddDataAndLoggingServices();
 
-            // Application Monitoring Services
-            services.AddApplicationMonitoring();
-
-            // ML & Analytics Services
-            services.AddMachineLearningServices();
-
-            // Export Services
-            services.AddExportServices();
-
-            // Flask Integration Services
-            services.AddFlaskIntegration();
-
-            // Session Management
-            services.AddSessionManagement();
-
-            // Core tracking and analytics services
-            services.AddSingleton<WindowTracker>();
-            services.AddSingleton<FlaskIntegrationFacade>();
-
-            return services;
-        }
-
-        private static IServiceCollection AddCoreInfrastructure(this IServiceCollection services)
-        {
-            // File system abstraction
+            // ------------------------
+            // Core Infrastructure
+            // ------------------------
             services.AddScoped<IFileSystemWrapper, FileSystemWrapper>();
 
-            // HTTP client for Flask communication
-            services.AddSingleton<IHttpClientWrapper, HttpClientWrapper>(provider =>
+            services.AddSingleton<IHttpClientWrapper>(provider =>
             {
                 var httpClient = new HttpClient
                 {
@@ -79,7 +64,6 @@ namespace FocusAssistant.Services.DependencyInjection
                 return new HttpClientWrapper(httpClient);
             });
 
-            // Logging
             services.AddLogging(builder =>
             {
                 builder.AddConsole();
@@ -87,103 +71,87 @@ namespace FocusAssistant.Services.DependencyInjection
                 builder.SetMinimumLevel(LogLevel.Information);
             });
 
-            return services;
-        }
-
-        private static IServiceCollection AddDataAndLoggingServices(this IServiceCollection services)
-        {
-            // Repository layer (Scoped - per request/operation)
+            // ------------------------
+            // Data & Logging Services
+            // ------------------------
             services.AddScoped<ISessionRepository, FileBasedSessionRepository>();
             services.AddScoped<IActivityRepository, FileBasedActivityRepository>();
-
-            // Logging implementations
             services.AddScoped<IActivityLogger, FileBasedActivityLogger>();
             services.AddScoped<ILoggingService, LoggingService>();
-
-            // Service layer
             services.AddScoped<IActivityManagementService, ActivityManagementService>();
 
-            return services;
-        }
-
-        private static IServiceCollection AddApplicationMonitoring(this IServiceCollection services)
-        {
-            // Window monitoring (Singleton - system-wide monitoring)
+            // ------------------------
+            // Application Monitoring
+            // ------------------------
             services.AddSingleton<IWindowMonitor, WindowsApiWindowMonitor>();
+            services.AddSingleton<WindowTracker>();
 
-            // Idle monitoring with configuration
-            services.AddSingleton<IIdleMonitor>(provider =>
+            services.AddScoped<IBaseService<UserSession>, BaseService<UserSession>>();
+            services.AddScoped<IBaseService<WorkSession>, BaseService<WorkSession>>();
+            services.AddScoped<IBaseService<AppUsage>, BaseService<AppUsage>>();
+            services.AddScoped<IBaseService<RLInteraction>, BaseService<RLInteraction>>();
+
+            services.AddScoped<ISessionManager, SessionManager>();
+
+            services.AddScoped<IIdleMonitor>(provider =>
             {
                 var config = provider.GetRequiredService<IFocusAssistantConfig>();
                 var idleTimeout = TimeSpan.FromMinutes(config.IdleTimeoutMinutes ?? 2);
                 return new WindowsApiIdleMonitor(idleTimeout);
             });
 
-            // Productivity classification
             services.AddScoped<IProductivityClassifier, ProductivityClassifier>();
+            services.AddScoped<IActivityService, FlaskActivityService>();
 
-            return services;
-        }
-
-        private static IServiceCollection AddMachineLearningServices(this IServiceCollection services)
-        {
-            // ML services (Scoped - per analysis operation)
+            // ------------------------
+            // Machine Learning Services
+            // ------------------------
             services.AddScoped<IMLDataProcessor, MLDataProcessor>();
-
-            // Productivity strategies (Scoped - strategy pattern implementation)
             services.AddScoped<RuleBasedProductivityStrategy>();
             services.AddScoped<MLBasedProductivityStrategy>();
-
-            // Strategy factory
             services.AddScoped<IProductivityStrategyFactory>(provider =>
                 new ProductivityStrategyFactory(
                     provider.GetRequiredService<RuleBasedProductivityStrategy>(),
                     provider.GetRequiredService<MLBasedProductivityStrategy>()
                 ));
 
-            return services;
-        }
-
-        private static IServiceCollection AddExportServices(this IServiceCollection services)
-        {
-            // Export implementations (Scoped - per export operation)
+            // ------------------------
+            // Export Services
+            // ------------------------
             services.AddScoped<SessionsCsvExporter>();
             services.AddScoped<SessionsJsonExporter>();
             services.AddScoped<DailyReportsCsvExporter>();
             services.AddScoped<DailyReportsJsonExporter>();
             services.AddScoped<AppUsageCsvExporter>();
             services.AddScoped<MLDataCsvExporter>();
-
-            // Export factory and service
             services.AddScoped<IExportFactory, ExportFactory>();
             services.AddScoped<IExportService, ExportService>();
 
-            return services;
-        }
-
-        private static IServiceCollection AddFlaskIntegration(this IServiceCollection services)
-        {
-            // Flask server management
+            // ------------------------
+            // Flask Integration
+            // ------------------------
             services.AddSingleton<IPythonExecutableFinder, PythonExecutableFinder>();
             services.AddSingleton<IFlaskServerManager, FlaskServerManager>();
-
-            // Flask API services
-            services.AddSingleton<IActivityService, FlaskActivityService>();
+            services.AddSingleton<FlaskIntegrationFacade>();
             services.AddSingleton<IAnalyticsService, FlaskAnalyticsService>();
             services.AddSingleton<IFeedbackService, FlaskFeedbackService>();
             services.AddSingleton<ISuggestionsService, SuggestionsService>();
-
-            // Flask data service
             services.AddScoped<IFlaskDataService, FlaskDataService>();
 
-            return services;
-        }
-
-        private static IServiceCollection AddSessionManagement(this IServiceCollection services)
-        {
-            // Session management (Scoped - per user session)
-            services.AddScoped<ISessionManager, SessionManager>();
+            // ------------------------
+            // Reports & Session Management
+            // ------------------------
             services.AddScoped<IReportGenerator, DailyReportGenerator>();
+
+            // ------------------------
+            // Views & ViewModels
+            // ------------------------
+            services.AddTransient<MainWindow>();
+            services.AddTransient<DashboardView>();
+            services.AddTransient<TrackingView>();
+            services.AddTransient<DashboardViewModel>();
+            services.AddTransient<TrackingViewModel>();
+            services.AddTransient<RecommendationViewModel>();
 
             return services;
         }

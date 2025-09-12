@@ -8,6 +8,6 @@ namespace FocusAssistant.Services.Export_Services.Interfaces
 {
     public interface IDailyReportsExporter : IExporter
     {
-        Task ExportDailyReportsAsync(string filePath, int days = 30);
+        Task ExportDailyReportsAsync(string filepath,int days = 30);
     }
 }

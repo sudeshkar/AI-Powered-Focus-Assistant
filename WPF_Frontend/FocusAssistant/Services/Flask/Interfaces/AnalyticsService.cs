@@ -11,7 +11,7 @@ namespace FocusAssistant.Services.Flask.Interfaces
 {
     public class AnalyticsService : BaseFlaskApiService ,IAnalyticsService
     {
-        protected AnalyticsService(FlaskConfiguration config, IHttpClientWrapper httpClient, IFlaskServerManager serverManager) : base(config, httpClient, serverManager)
+        public AnalyticsService(FlaskConfiguration config, IHttpClientWrapper httpClient, IFlaskServerManager serverManager) : base(config, httpClient, serverManager)
         {
         }
 

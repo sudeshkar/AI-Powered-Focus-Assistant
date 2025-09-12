@@ -15,7 +15,7 @@ namespace FocusAssistant.Models
 
         public string wID { get; set; }
 
-        [ForeignKey("WID")]
+        [ForeignKey("wID")]
         public WorkSession WorkSession { get; set; }
         public string AppName { get; set; }
         public string WindowTitle { get; set; }

@@ -1,4 +1,5 @@
 ﻿using FocusAssistant.Models;
+using FocusAssistant.Models.Response_Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,6 +13,7 @@ namespace FocusAssistant.Services.Session.Interfaces
         // Events
         event EventHandler<UserSession> SessionStarted;
         event EventHandler<UserSession> SessionEnded;
+        public event EventHandler<ActivityResponse>? AiInterventionReceived;
 
         Task StartSessionAsync();
         Task EndSessionAsync();

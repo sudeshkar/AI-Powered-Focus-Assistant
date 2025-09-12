@@ -17,7 +17,7 @@ namespace FocusAssistant.Services.Datafetch
         {
         }
 
-        public async Task<IEnumerable> GetByDateAsync(DateTime date)
+        public async Task<IEnumerable<UserSession>> GetByDateAsync(DateTime date)
         {
             return await _dbSet
            .Where(s => s.StartTime.Date == date.Date)

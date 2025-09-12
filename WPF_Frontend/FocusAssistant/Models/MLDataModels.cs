@@ -51,7 +51,7 @@ namespace FocusAssistant.Models
         public Dictionary<int, double> ProductivityByHour { get; set; } // Hour -> Productivity Score
         public string MostProductiveHour { get; set; }
         public string LeastProductiveHour { get; set; }
-        public bool AppUsageMinutes { get; internal set; }
+        public String AppUsageMinutes { get; internal set; }
 
         public DailyProductivityReport()
         {

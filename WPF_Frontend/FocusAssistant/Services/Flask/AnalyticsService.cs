@@ -7,7 +7,7 @@ namespace FocusAssistant.Services.Flask
 {
     public class FlaskAnalyticsService : IAnalyticsService
     {
-        private readonly IHttpClientWrapper _httpClient;
+        public readonly IHttpClientWrapper _httpClient;
 
         public FlaskAnalyticsService(IHttpClientWrapper httpClient)
         {

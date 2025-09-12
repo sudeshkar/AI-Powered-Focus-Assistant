@@ -13,9 +13,14 @@ namespace FocusAssistant.Models
         [Key]
         public string wID { get; set; } = Guid.NewGuid().ToString();
 
+        // Foreign key to UserSession
         public string SessionId { get; set; }
+
         [ForeignKey("SessionId")]
+
+        [System.Text.Json.Serialization.JsonIgnore]
         public UserSession UserSession { get; set; }
+
         public DateTime StartTime { get; set; }
         public DateTime EndTime { get; set; }
         public TimeSpan Duration { get; set; }
@@ -24,39 +29,42 @@ namespace FocusAssistant.Models
         public TimeSpan BreakTime { get; set; }
         public double ProductivityScore { get; set; }
         public int AppSwitches { get; set; }
+
+        // Related data
         public List<AppUsage> AppUsages { get; set; } = new List<AppUsage>();
-        public List<string> TopApps { get; set; } = new List<string>();
         public List<RLInteraction> RLInteractions { get; set; } = new List<RLInteraction>();
 
+        // Store TopApps as JSON
+        public string? TopAppsJson { get; set; } = "[]";
 
-        public WorkSession()
+        [NotMapped]
+        public List<string> TopApps
         {
-            AppUsages = new List<AppUsage>();
-            TopApps = new List<string>();
+            get => string.IsNullOrEmpty(TopAppsJson)
+                ? new List<string>()
+                : System.Text.Json.JsonSerializer.Deserialize<List<string>>(TopAppsJson);
+
+            set => TopAppsJson = System.Text.Json.JsonSerializer.Serialize(value);
         }
 
         public void CalculateStatistics()
         {
             if (!AppUsages.Any()) return;
 
-            // Calculate productive vs distracted time
             ProductiveTime = TimeSpan.FromTicks(
                 AppUsages.Where(a => a.IsProductive).Sum(a => a.Duration.Ticks));
 
             DistractedTime = TimeSpan.FromTicks(
                 AppUsages.Where(a => !a.IsProductive).Sum(a => a.Duration.Ticks));
 
-            // Calculate app switches
             AppSwitches = AppUsages.Count;
 
-            // Calculate productivity score (0-100)
             var totalActiveTime = ProductiveTime + DistractedTime;
             if (totalActiveTime.TotalMinutes > 0)
             {
                 ProductivityScore = (ProductiveTime.TotalMinutes / totalActiveTime.TotalMinutes) * 100;
             }
 
-            // Get top 5 most used apps
             TopApps = AppUsages
                 .GroupBy(a => a.AppName)
                 .OrderByDescending(g => g.Sum(a => a.Duration.TotalMinutes))
@@ -65,6 +73,7 @@ namespace FocusAssistant.Models
                 .ToList();
         }
     }
+
 
     public class SessionStatistics
     {

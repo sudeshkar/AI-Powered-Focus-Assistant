@@ -42,8 +42,8 @@ namespace FocusAssistant.Services.Flask
         public void StopServer() =>
             _serverManager.StopServer();
 
-        public async Task<ActivityResponse> SendActivityAsync(AppUsage appUsage) =>
-            await _activityService.SendActivityAsync(appUsage);
+        public async Task<ActivityResponse> SendActivityAsync( ActivityRequest activityRequest) =>
+            await _activityService.SendActivityAsync(activityRequest);
 
         public async Task<SuggestionsResponse> GetSuggestionsAsync() =>
             await _suggestionsService.GetSuggestionsAsync();
