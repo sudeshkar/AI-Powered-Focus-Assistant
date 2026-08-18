@@ -2,7 +2,6 @@
 .env
 .env.local
 .env.*.local
-!.env.example
 
 # ---- Visual Studio / Rider ----
 .vs/
@@ -23,24 +22,21 @@ artifacts/
 *.pdb
 *.cache
 
-# ---- Python ----
-__pycache__/
-*.py[cod]
-.venv/
-venv/
-env/
-.pytest_cache/
-.mypy_cache/
-
 # ---- Local application data ----
 *.db
 *.db-shm
 *.db-wal
 *.log
-# Anchored: an unanchored "Data/" also matched Services/Data/, which holds
-# the EF Core DbContext.
+# Anchored: an unanchored "Data/" also matched src/FocusAssistant.Data/, the
+# EF Core project.
 /Data/
 /Logs/
+
+# ---- Downloaded models (Phase 6) ----
+# The embedding model is small and committed; the local SLM is downloaded on
+# first use and never belongs in source control.
+/models/*.onnx
+/models/*.gguf
 
 # ---- OS ----
 Thumbs.db
