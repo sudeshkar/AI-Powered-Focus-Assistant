@@ -1,45 +1,22 @@
-﻿using FocusAssistant.Models;
 using FocusAssistant.Models.Response_Models;
+using FocusAssistant.Services.Config;
 using FocusAssistant.Services.Flask.Interfaces;
-using System.Net.Http;
-using System.Text;
-using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace FocusAssistant.Services.Flask
 {
-    public class FlaskActivityService : IActivityService
+    /// <summary>Posts activity to the backend and returns the agent's decision.</summary>
+    public class FlaskActivityService : BaseFlaskApiService, IActivityService
     {
-        private readonly IHttpClientWrapper _httpClient;
-
-        public FlaskActivityService(IHttpClientWrapper httpClient)
+        public FlaskActivityService(
+            FlaskConfiguration config,
+            IHttpClientWrapper httpClient,
+            IFlaskServerManager serverManager)
+            : base(config, httpClient, serverManager)
         {
-            _httpClient = httpClient;
         }
 
-        public async Task<ActivityResponse> SendActivityAsync(ActivityRequest activityRequest)
-        {
-            try
-            {
-                var json = JsonSerializer.Serialize(activityRequest);
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
-                var response = await _httpClient.PostAsync("http://127.0.0.1:5000/activity", content);
-                response.EnsureSuccessStatusCode();
-                var responseJson = await response.Content.ReadAsStringAsync();
-                if (responseJson != null)
-                {
-                    return JsonSerializer.Deserialize<ActivityResponse>(responseJson);
-                }
-                return new ActivityResponse
-                {
-                    Status ="Error"
-                };
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error sending activity: {ex.Message} at {DateTime.Now:HH:mm:ss.fff}");
-                return new ActivityResponse { Status = ex.Message };
-            }
-        }
+        public Task<ActivityResponse?> SendActivityAsync(ActivityRequest activityRequest) =>
+            ExecutePostRequest<ActivityResponse>("activity", activityRequest);
     }
 }

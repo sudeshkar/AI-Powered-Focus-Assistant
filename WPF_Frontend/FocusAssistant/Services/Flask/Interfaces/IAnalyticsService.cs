@@ -1,15 +1,14 @@
-﻿using FocusAssistant.Models.Response_Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+using FocusAssistant.Models.Response_Models;
 using System.Threading.Tasks;
 
 namespace FocusAssistant.Services.Flask.Interfaces
 {
     public interface IAnalyticsService
     {
-        Task<AnalyticsResponse> GetAnalyticsAsync();
-        Task<InsightsResponse> GetInsightsAsync();
+        /// <summary>Today's totals, or null when the backend is unreachable.</summary>
+        Task<AnalyticsResponse?> GetAnalyticsAsync();
+
+        /// <summary>Learning metrics, or null when the backend is unreachable.</summary>
+        Task<InsightsResponse?> GetInsightsAsync();
     }
 }

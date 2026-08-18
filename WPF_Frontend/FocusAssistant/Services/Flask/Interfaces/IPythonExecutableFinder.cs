@@ -1,13 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
 namespace FocusAssistant.Services.Flask.Interfaces
 {
     public interface IPythonExecutableFinder
     {
-        string FindPythonExecutable();
+        /// <summary>Path to a Python executable, or null when none could be found.</summary>
+        string? FindPythonExecutable();
     }
 }
