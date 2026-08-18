@@ -1,15 +1,14 @@
 # enhanced_rl_agent.py - Advanced RL Agent with Sophisticated Learning
 import numpy as np
 import json
-import pickle
 import os
+import shutil
 from datetime import datetime, timedelta
 from collections import defaultdict, deque
-import hashlib
-from sklearn.preprocessing import StandardScaler
-from sklearn.cluster import KMeans
 import threading
 import time
+
+import config
 
 class EnhancedFocusRLAgent:
     def __init__(self, learning_rate=0.1, discount_factor=0.95, epsilon=0.2):
@@ -64,22 +63,35 @@ class EnhancedFocusRLAgent:
             'cognitive_load_reduction', 'flow_state_induction'
         ]
         
+        # Guards the mutable learning state. Flask serves requests on multiple
+        # threads and the background worker rewrites the same subsystems, so
+        # every mutating entry point takes this. Reentrant because saving and
+        # insight generation happen inside already-locked sections.
+        self._state_lock = threading.RLock()
+
         # Load and initialize
         self.load_model()
         self._start_background_learning()
-    
+
     def _start_background_learning(self):
         """Start background thread for continuous learning"""
         def background_worker():
             while True:
                 time.sleep(300)  # Every 5 minutes
                 self._background_analysis()
-                
+
         thread = threading.Thread(target=background_worker, daemon=True)
         thread.start()
-    
+
     def _background_analysis(self):
         """Continuous background analysis and learning"""
+        try:
+            with self._state_lock:
+                self._run_background_analysis()
+        except Exception as e:
+            print(f"Background analysis error: {e}")
+
+    def _run_background_analysis(self):
         try:
             self.pattern_analyzer.update_patterns(list(self.user_sessions))
             self.circadian_optimizer.update_preferences(self.feedback_history)
@@ -474,6 +486,10 @@ class EnhancedFocusRLAgent:
     
     def learn_from_enhanced_feedback(self, state, action, feedback_data, context):
         """Multi-dimensional learning from feedback"""
+        with self._state_lock:
+            self._learn_from_enhanced_feedback(state, action, feedback_data, context)
+
+    def _learn_from_enhanced_feedback(self, state, action, feedback_data, context):
         state_key = self.state_to_key(state)
         if state_key not in self.q_table:
             self.q_table[state_key] = {action: 0.0 for action in self.actions}
@@ -659,6 +675,10 @@ class EnhancedFocusRLAgent:
     
     def get_advanced_model_insights(self):
         """Comprehensive model insights and analytics"""
+        with self._state_lock:
+            return self._build_insights()
+
+    def _build_insights(self):
         insights = {
             'learning_metrics': self._get_learning_metrics(),
             'behavioral_patterns': self.pattern_analyzer.get_comprehensive_patterns(),
@@ -758,8 +778,12 @@ class EnhancedFocusRLAgent:
     
     def save_enhanced_model(self):
         """Save comprehensive model with all subsystems"""
+        with self._state_lock:
+            self._save_enhanced_model()
+
+    def _save_enhanced_model(self):
         try:
-            model_dir = os.path.join(os.path.dirname(__file__), 'models')
+            model_dir = config.MODEL_DIR
             os.makedirs(model_dir, exist_ok=True)
             model_data = {
                 'version': '2.0',
@@ -784,59 +808,73 @@ class EnhancedFocusRLAgent:
                     'adaptive_thresholds': self.adaptive_thresholds.to_dict(),
                     'context_predictor': self.context_predictor.to_dict()
                 },
-                'feedback_history': list(self.feedback_history)[-500:],
-                'model_stats': self.get_advanced_model_insights()
+                'feedback_history': list(self.feedback_history)[-500:]
             }
+            # Write to a temp file and replace, so an interrupted save cannot
+            # leave a truncated model behind.
             json_path = os.path.join(model_dir, 'enhanced_focus_rl_model.json')
-            with open(json_path, 'w') as f:
+            tmp_path = json_path + '.tmp'
+            with open(tmp_path, 'w') as f:
                 json.dump(model_data, f, indent=2, default=str)
-            pkl_path = os.path.join(model_dir, 'enhanced_focus_rl_model.pkl')
-            with open(pkl_path, 'wb') as f:
-                pickle.dump(model_data, f)
-            backup_path = os.path.join(model_dir, f'backup_{int(datetime.now().timestamp())}.pkl')
-            with open(backup_path, 'wb') as f:
-                pickle.dump(model_data, f)
+            os.replace(tmp_path, json_path)
+
+            self._rotate_backups(model_dir, json_path)
+
             print(f"Enhanced model saved: {len(self.q_table)} states, "
                   f"{len(self.feedback_history)} feedback entries")
         except Exception as e:
             print(f"Error saving enhanced model: {e}")
+
+    def _rotate_backups(self, model_dir, json_path):
+        """Keep at most MODEL_BACKUP_LIMIT timestamped copies.
+
+        Previously every save wrote another ~1 MB backup and never deleted any.
+        """
+        limit = config.MODEL_BACKUP_LIMIT
+        if limit <= 0:
+            return
+
+        backup_dir = os.path.join(model_dir, 'backups')
+        os.makedirs(backup_dir, exist_ok=True)
+        stamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+        shutil.copy2(json_path, os.path.join(backup_dir, f'model_{stamp}.json'))
+
+        backups = sorted(
+            f for f in os.listdir(backup_dir)
+            if f.startswith('model_') and f.endswith('.json')
+        )
+        for stale in backups[:-limit]:
+            try:
+                os.remove(os.path.join(backup_dir, stale))
+            except OSError as e:
+                print(f"Could not remove old backup {stale}: {e}")
     
     def load_model(self):
-        """Load enhanced model with backward compatibility"""
+        """Load persisted agent state.
+
+        JSON only: the previous version preferred a .pkl sibling, and unpickling
+        a file from disk executes whatever it contains.
+        """
+        json_path = os.path.join(config.MODEL_DIR, 'enhanced_focus_rl_model.json')
         try:
-            model_dir = os.path.join(os.path.dirname(__file__), 'models')
-            pkl_path = os.path.join(model_dir, 'enhanced_focus_rl_model.pkl')
-            json_path = os.path.join(model_dir, 'enhanced_focus_rl_model.json')
+            if not os.path.exists(json_path):
+                print("No model file found. Starting with a fresh model.")
+                return
 
-            # Try loading from pickle
-            if os.path.exists(pkl_path):
-                if os.path.getsize(pkl_path) == 0:
-                    print(f"Error: {pkl_path} is empty")
-                else:
-                    with open(pkl_path, 'rb') as f:
-                        model_data = pickle.load(f)
-                    self._load_from_json_data(model_data)
-                    print(f"Enhanced model loaded from pickle: {len(self.q_table)} states")
-                    return
+            if os.path.getsize(json_path) == 0:
+                print(f"{json_path} is empty. Starting with a fresh model.")
+                return
 
-            # Try loading from JSON
-            if os.path.exists(json_path):
-                if os.path.getsize(json_path) == 0:
-                    print(f"Error: {json_path} is empty")
-                else:
-                    with open(json_path, 'r') as f:
-                        model_data = json.load(f)
-                    self._load_from_json_data(model_data)
-                    print(f"Enhanced model loaded from JSON: {len(self.q_table)} states")
-                    return
-
-            print("No valid model files found. Starting with fresh enhanced model")
+            with open(json_path, 'r') as f:
+                model_data = json.load(f)
+            self._load_from_json_data(model_data)
+            print(f"Enhanced model loaded: {len(self.q_table)} states")
         except Exception as e:
-            print(f"Could not load enhanced model: {str(e)}")
-            print("Starting with fresh enhanced model")
+            print(f"Could not load enhanced model: {e}")
+            print("Starting with a fresh model.")
     
     def _load_from_json_data(self, model_data):
-        """Load from JSON or pickle data"""
+        """Populate agent state from a loaded model dict"""
         core_rl = model_data.get('core_rl', {})
         q_table_data = core_rl.get('q_table', {})
         self.q_table = {k: v for k, v in q_table_data.items()}
@@ -847,6 +885,10 @@ class EnhancedFocusRLAgent:
     
     def reset(self):
         """Reset the agent to initial state"""
+        with self._state_lock:
+            self._reset()
+
+    def _reset(self):
         self.q_table = {}
         self.state_visits.clear()
         self.action_success_rates.clear()
