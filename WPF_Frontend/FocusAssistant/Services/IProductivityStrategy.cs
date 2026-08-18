@@ -1,18 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
 namespace FocusAssistant.Services
 {
+    /// <summary>
+    /// Decides whether a given application/window counts as productive.
+    /// </summary>
     public interface IProductivityStrategy
     {
-        bool IsProductive(string appName, string windowTitle);
-        Task<bool> IsProductiveAsync(string appName, string windowTitle);
-        int Priority { get; }
-        bool CanAnalyze(string appName, string windowTitle);
-        string GetCategory(string appName);
-        double GetProductivityScore(string appName, string windowTitle);
+        /// <summary>True when the activity should count towards productive time.</summary>
+        bool IsProductive(string? appName, string? windowTitle);
+
+        /// <summary>Coarse category for the application, e.g. "Development"; "Other" when unknown.</summary>
+        string GetCategory(string? appName);
     }
 }
