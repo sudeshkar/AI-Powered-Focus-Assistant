@@ -37,8 +37,10 @@ env/
 *.db-shm
 *.db-wal
 *.log
-Data/
-Logs/
+# Anchored: an unanchored "Data/" also matched Services/Data/, which holds
+# the EF Core DbContext.
+/Data/
+/Logs/
 
 # ---- OS ----
 Thumbs.db
