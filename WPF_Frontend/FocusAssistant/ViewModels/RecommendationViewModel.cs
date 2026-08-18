@@ -1,87 +1,48 @@
-﻿using FocusAssistant.Models.Response_Models;
+using FocusAssistant.Models.Response_Models;
 using FocusAssistant.Services.Flask;
-using FocusAssistant.Services.Flask.Interfaces;
-using FocusAssistant.Services.Session;
 using FocusAssistant.Services.Session.Interfaces;
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;  // For ObservableCollection
-using System.ComponentModel;
+using System.Collections.ObjectModel;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
 
-// Simple RelayCommand (if not using a MVVM toolkit)
-public class RelayCommand : ICommand
-{
-    private readonly Func<Task> _execute;
-    private readonly Func<bool> _canExecute;
-    public RelayCommand(Func<Task> execute, Func<bool> canExecute = null)
-    {
-        _execute = execute ?? throw new ArgumentNullException(nameof(execute));
-        _canExecute = canExecute ?? (() => true);
-    }
-    public event EventHandler CanExecuteChanged;
-    public bool CanExecute(object parameter) => _canExecute();
-    public async void Execute(object parameter) => await _execute();
-}
-
 namespace FocusAssistant.ViewModels
 {
-    public class RecommendationViewModel : INotifyPropertyChanged
+    /// <summary>
+    /// Backs the Recommendations view: what the agent has learned, and the most
+    /// recent suggestion it made.
+    /// </summary>
+    public class RecommendationViewModel : ObservableObject, IDisposable
     {
+        private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(5);
+
         private readonly ISessionManager _sessionManager;
         private readonly FlaskIntegrationFacade _facade;
-        private string _recentInterventionMessage;
-        private string _recentInterventionDetails;
-        private string _productivityTrend;
-        private string _energyPatterns;
-        private string _optimalTimes;
-        private double _qValueStd;  // Added for Std
+        private readonly DispatcherTimer _refreshTimer;
 
-        // Lists for binding - FIXED: Use ActionMetrics directly
+        private string _recentInterventionMessage = "No recent suggestion";
+        private string _recentInterventionDetails = "N/A";
+        private string _productivityTrend = "Trend: N/A";
+        private string _energyPatterns = "N/A";
+        private string _optimalTimes = "N/A";
+        private double _qValueStd;
+        private bool _disposed;
+
         public ObservableCollection<string> AISuggestions { get; } = new();
         public ObservableCollection<string> MostActiveHours { get; } = new();
-        public ObservableCollection<KeyValuePair<string, ActionMetrics>> ActionEffectiveness { get; } = new();  // FIXED: Matches Dictionary type
-        public ObservableCollection<double> QValueStats { get; } = new();  // Min, Mean, Max
+        public ObservableCollection<KeyValuePair<string, ActionMetrics>> ActionEffectiveness { get; } = new();
+        public ObservableCollection<double> QValueStats { get; } = new();
 
-        public string RecentInterventionMessage
-        {
-            get => _recentInterventionMessage;
-            set => SetProperty(ref _recentInterventionMessage, value);
-        }
-
-        public string RecentInterventionDetails
-        {
-            get => _recentInterventionDetails;
-            set => SetProperty(ref _recentInterventionDetails, value);
-        }
-
-        public string ProductivityTrend
-        {
-            get => _productivityTrend;
-            set => SetProperty(ref _productivityTrend, value);
-        }
-
-        public string EnergyPatterns
-        {
-            get => _energyPatterns;
-            set => SetProperty(ref _energyPatterns, value);
-        }
-
-        public string OptimalTimes
-        {
-            get => _optimalTimes;
-            set => SetProperty(ref _optimalTimes, value);
-        }
-
-        public double QValueStd  // Added binding for Std
-        {
-            get => _qValueStd;
-            set => SetProperty(ref _qValueStd, value);
-        }
+        public string RecentInterventionMessage { get => _recentInterventionMessage; set => SetProperty(ref _recentInterventionMessage, value); }
+        public string RecentInterventionDetails { get => _recentInterventionDetails; set => SetProperty(ref _recentInterventionDetails, value); }
+        public string ProductivityTrend { get => _productivityTrend; set => SetProperty(ref _productivityTrend, value); }
+        public string EnergyPatterns { get => _energyPatterns; set => SetProperty(ref _energyPatterns, value); }
+        public string OptimalTimes { get => _optimalTimes; set => SetProperty(ref _optimalTimes, value); }
+        public double QValueStd { get => _qValueStd; set => SetProperty(ref _qValueStd, value); }
 
         public ICommand RefreshCommand { get; }
         public ICommand TakeActionCommand { get; }
@@ -90,152 +51,177 @@ namespace FocusAssistant.ViewModels
         {
             _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
             _facade = facade ?? throw new ArgumentNullException(nameof(facade));
+
+            RefreshCommand = new AsyncRelayCommand(LoadDataAsync);
+            TakeActionCommand = new AsyncRelayCommand(OnTakeActionAsync);
+
             _sessionManager.AiInterventionReceived += OnAiInterventionReceived;
 
-            RefreshCommand = new RelayCommand(async () => await LoadDataAsync());
-            TakeActionCommand = new RelayCommand(async () => await OnTakeActionAsync());
+            _refreshTimer = new DispatcherTimer { Interval = RefreshInterval };
+            _refreshTimer.Tick += (_, _) => _ = LoadDataAsync();
+            _refreshTimer.Start();
 
-            RecentInterventionMessage = "No recent intervention";
-            RecentInterventionDetails = "N/A";
-            LoadDataAsync(); // Initial load
-
-            // Auto-refresh every 5 minutes
-            var timer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(5) };
-            timer.Tick += (s, e) => _ = LoadDataAsync();  // Fire-and-forget
-            timer.Start();
+            _ = LoadDataAsync();
         }
 
         private async Task LoadDataAsync()
         {
+            SuggestionsResponse? suggestions;
+            InsightsResponse? insights;
+
             try
             {
-                // Parallel calls for efficiency
                 var suggestionsTask = _facade.GetSuggestionsAsync();
                 var insightsTask = _facade.GetInsightsAsync();
-
                 await Task.WhenAll(suggestionsTask, insightsTask);
 
-                var suggestions = await suggestionsTask;
-                var insights = await insightsTask;
-
-                // Update on UI thread
-                System.Windows.Application.Current.Dispatcher.Invoke(() =>
-                {
-                    // AI Suggestions
-                    AISuggestions.Clear();
-                    if (suggestions?.Suggestions != null)
-                    {
-                        AISuggestions.Add($"Daily patterns: {suggestions.Suggestions.DailyPatternsCount}");
-                        AISuggestions.Add($"Weekly patterns: {suggestions.Suggestions.WeeklyPatternsCount}");
-                        ProductivityTrend = $"Trend: {suggestions.Suggestions.ProductivityTrends?.Trend ?? "N/A"}";
-                    }
-                    else
-                    {
-                        AISuggestions.Add("No suggestions available");
-                    }
-
-                    // Most Active Hours
-                    MostActiveHours.Clear();
-                    if (suggestions?.Suggestions?.MostActiveHours != null && suggestions.Suggestions.MostActiveHours.Any())
-                    {
-                        foreach (var h in suggestions.Suggestions.MostActiveHours.Where(l => l.Count >= 2))
-                            MostActiveHours.Add($"{h[0]}: {h[1]} activities");
-                    }
-                    else
-                    {
-                        MostActiveHours.Add("No active hours data yet");
-                    }
-
-                    // Action Effectiveness - FIXED: Direct add, no conversion
-                    ActionEffectiveness.Clear();
-                    if (insights?.Insights?.ActionEffectiveness != null && insights.Insights.ActionEffectiveness.Any())
-                    {
-                        foreach (var kv in insights.Insights.ActionEffectiveness)
-                        {
-                            ActionEffectiveness.Add(kv);  // Now: KeyValuePair<string, ActionMetrics>
-                        }
-                    }
-                    else
-                    {
-                        ActionEffectiveness.Add(new KeyValuePair<string, ActionMetrics>("No Data", null));
-                    }
-
-                    // Circadian Insights
-                    if (insights?.Insights?.CircadianInsights != null)
-                    {
-                        EnergyPatterns = $"Phases: {string.Join(", ", insights.Insights.CircadianInsights.EnergyPatternsPhases ?? new List<string>())}";
-                        if (insights.Insights.CircadianInsights.OptimalTimes?.TryGetValue("night", out double score) == true)
-                            OptimalTimes = $"Night score: {score:F2}";
-                        else
-                            OptimalTimes = "N/A";
-                    }
-                    else
-                    {
-                        EnergyPatterns = "N/A";
-                        OptimalTimes = "N/A";
-                    }
-
-                    // Q-Values - Added Std
-                    QValueStats.Clear();
-                    if (insights?.Insights?.LearningMetrics?.QValueStatistics != null)
-                    {
-                        var q = insights.Insights.LearningMetrics.QValueStatistics;
-                        QValueStats.Add(q.Min);
-                        QValueStats.Add(q.Mean);
-                        QValueStats.Add(q.Max);
-                        QValueStd = q.Std;
-                    }
-                    else
-                    {
-                        QValueStats.Add(0); QValueStats.Add(0); QValueStats.Add(0);
-                        QValueStd = 0;
-                    }
-
-                    // Example: Add more from other sections (e.g., Personalization)
-                    if (insights?.Insights?.PersonalizationProfile != null)
-                    {
-                        var profile = insights.Insights.PersonalizationProfile;
-                        AISuggestions.Add($"Communication Style: {profile.Preferences?.CommunicationStyle ?? "N/A"}");
-                        AISuggestions.Add($"Gamification: {(profile.Preferences?.GamificationPreference == true ? "Yes" : "No")}");
-                    }
-                });
+                suggestions = await suggestionsTask;
+                insights = await insightsTask;
             }
             catch (Exception ex)
             {
-                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                await OnUiThread(() =>
                 {
                     AISuggestions.Clear();
-                    AISuggestions.Add($"Error loading data: {ex.Message}");
+                    AISuggestions.Add($"Could not reach the AI backend: {ex.Message}");
                 });
+                return;
             }
+
+            await OnUiThread(() =>
+            {
+                ApplySuggestions(suggestions);
+                ApplyInsights(insights);
+            });
+        }
+
+        private void ApplySuggestions(SuggestionsResponse? response)
+        {
+            AISuggestions.Clear();
+            MostActiveHours.Clear();
+
+            var patterns = response?.Suggestions;
+            if (patterns is null)
+            {
+                AISuggestions.Add("No suggestions available yet");
+                ProductivityTrend = "Trend: N/A";
+                MostActiveHours.Add("No activity data yet");
+                return;
+            }
+
+            AISuggestions.Add($"Daily patterns recorded: {patterns.DailyPatternsCount}");
+            AISuggestions.Add($"Weekly patterns recorded: {patterns.WeeklyPatternsCount}");
+            ProductivityTrend = $"Trend: {patterns.ProductivityTrends?.Trend ?? "N/A"}";
+
+            var hours = patterns.MostActiveHours?.Where(h => h.Count >= 2).ToList();
+            if (hours is { Count: > 0 })
+            {
+                foreach (var hour in hours)
+                    MostActiveHours.Add($"{hour[0]}: {hour[1]} activities");
+            }
+            else
+            {
+                MostActiveHours.Add("No activity data yet");
+            }
+        }
+
+        private void ApplyInsights(InsightsResponse? response)
+        {
+            ActionEffectiveness.Clear();
+            QValueStats.Clear();
+
+            var insights = response?.Insights;
+            if (insights is null)
+            {
+                EnergyPatterns = "N/A";
+                OptimalTimes = "N/A";
+                QValueStats.Add(0);
+                QValueStats.Add(0);
+                QValueStats.Add(0);
+                QValueStd = 0;
+                return;
+            }
+
+            if (insights.ActionEffectiveness is { Count: > 0 })
+            {
+                // Most-used first, so the list leads with what the agent actually relies on.
+                foreach (var entry in insights.ActionEffectiveness.OrderByDescending(kv => kv.Value.TotalUses))
+                    ActionEffectiveness.Add(entry);
+            }
+
+            var circadian = insights.CircadianInsights;
+            EnergyPatterns = circadian?.EnergyPatternsPhases is { Count: > 0 } phases
+                ? $"Phases: {string.Join(", ", phases)}"
+                : "N/A";
+
+            OptimalTimes = FormatOptimalTimes(circadian?.OptimalTimes);
+
+            var q = insights.LearningMetrics?.QValueStatistics;
+            QValueStats.Add(q?.Min ?? 0);
+            QValueStats.Add(q?.Mean ?? 0);
+            QValueStats.Add(q?.Max ?? 0);
+            QValueStd = q?.Std ?? 0;
+
+            var preferences = insights.PersonalizationProfile?.Preferences;
+            if (preferences is not null)
+            {
+                AISuggestions.Add($"Communication style: {preferences.CommunicationStyle ?? "N/A"}");
+                AISuggestions.Add($"Gamification: {(preferences.GamificationPreference ? "on" : "off")}");
+            }
+        }
+
+        /// <summary>Shows the best window overall rather than only reporting "night".</summary>
+        private static string FormatOptimalTimes(Dictionary<string, double>? optimalTimes)
+        {
+            if (optimalTimes is not { Count: > 0 })
+                return "N/A";
+
+            var best = optimalTimes.OrderByDescending(kv => kv.Value).First();
+            return $"Best focus window: {best.Key} ({best.Value:F2})";
         }
 
         private void OnAiInterventionReceived(object? sender, ActivityResponse e)
         {
-            RecentInterventionMessage = e.InterventionMessage ?? "No recent intervention";
-            RecentInterventionDetails = $"Action: {e.ActionTaken ?? "N/A"} | Risk: {e.DistractionRisk:F1} | Time: {DateTime.Now:HH:mm:ss}";
+            _ = OnUiThread(() =>
+            {
+                RecentInterventionMessage = e.InterventionMessage ?? "No recent suggestion";
+                RecentInterventionDetails =
+                    $"Action: {e.ActionTaken ?? "N/A"} | Risk: {e.DistractionRisk:P0} | {DateTime.Now:HH:mm:ss}";
+            });
         }
 
-        private async Task OnTakeActionAsync()
+        private Task OnTakeActionAsync()
         {
-            // TODO: Send feedback to train RL
-            // e.g., await _facade.SendFeedbackAsync(new FeedbackRequest { InterventionId = "...", Helpful = true, ProductivityChange = 0.2f });
-            RecentInterventionDetails += " | Action taken! (Feedback sent)";
+            // Feedback for a specific suggestion is sent by AiInterventionWindow,
+            // which holds the intervention id this view model does not have.
+            RecentInterventionDetails += " | Acknowledged";
             OnPropertyChanged(nameof(RecentInterventionDetails));
+            return Task.CompletedTask;
         }
 
-        public event PropertyChangedEventHandler PropertyChanged;
-        protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        private static Task OnUiThread(Action action)
         {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher is null)
+                return Task.CompletedTask;
+
+            if (dispatcher.CheckAccess())
+            {
+                action();
+                return Task.CompletedTask;
+            }
+
+            return dispatcher.InvokeAsync(action).Task;
         }
 
-        protected bool SetProperty<T>(ref T storage, T value, [CallerMemberName] string propertyName = null)
+        public void Dispose()
         {
-            if (EqualityComparer<T>.Default.Equals(storage, value)) return false;
-            storage = value;
-            OnPropertyChanged(propertyName);
-            return true;
+            if (_disposed)
+                return;
+
+            _disposed = true;
+            _refreshTimer.Stop();
+            _sessionManager.AiInterventionReceived -= OnAiInterventionReceived;
         }
     }
 }

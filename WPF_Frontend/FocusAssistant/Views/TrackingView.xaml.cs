@@ -1,82 +1,62 @@
-﻿using FocusAssistant.Enums;
-using FocusAssistant.Models;
+using FocusAssistant.Enums;
 using FocusAssistant.Models.Response_Models;
-using FocusAssistant.Services.Application_Monitoring;
-using FocusAssistant.Services.Application_Monitoring.Interfaces;
-using FocusAssistant.Services.Datafetch;
 using FocusAssistant.Services.Flask.Interfaces;
-using FocusAssistant.Services.Session;
-using FocusAssistant.Services.Session.Interfaces;
 using FocusAssistant.ViewModels;
 using System;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 
 namespace FocusAssistant.Views
 {
+    /// <summary>Live tracking status, and host for the intervention popup.</summary>
     public partial class TrackingView : UserControl
     {
         private readonly TrackingViewModel _viewModel;
-        private AiInterventionWindow _activeAiPopup;
-        private readonly IFeedbackService _feedbackService;  // FIX: Now properly assigned via constructor.
+        private readonly IFeedbackService _feedbackService;
 
-        // FIX: Static lock for thread-safe singleton enforcement (prevents races on rapid events).
-        private static readonly object _popupLock = new object();
+        private AiInterventionWindow? _activePopup;
 
-        public TrackingView(TrackingViewModel viewModel, IFeedbackService feedbackService)  // FIX: Add feedbackService param.
+        public TrackingView(TrackingViewModel viewModel, IFeedbackService feedbackService)
         {
             InitializeComponent();
 
-            _viewModel = viewModel;
-            _feedbackService = feedbackService;  // FIX: Assign it.
-            DataContext = _viewModel;
+            _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+            _feedbackService = feedbackService ?? throw new ArgumentNullException(nameof(feedbackService));
 
-            _viewModel.AiInterventionOccurred += ViewModel_AiInterventionOccurred;
+            DataContext = _viewModel;
+            _viewModel.AiInterventionOccurred += OnAiInterventionOccurred;
         }
 
-        // FIX: Enhanced with lock, early validation (redundant but safe), and better lifecycle.
-        // Now the single source of truth for popups.
-        private void ViewModel_AiInterventionOccurred(object? sender, ActivityResponse e)
+        private void OnAiInterventionOccurred(object? sender, ActivityResponse e)
         {
-            // Early skip (already done in ViewModel, but double-check).
-            if (e == null || e.InterventionId == null || string.IsNullOrEmpty(e.InterventionMessage))
+            if (e?.InterventionId is null || string.IsNullOrEmpty(e.InterventionMessage))
+                return;
+
+            // Marshal to the UI thread, then run entirely on it. All popup state is
+            // touched only here, so the dispatcher is the synchronisation and the
+            // previous static lock is unnecessary.
+            Dispatcher.InvokeAsync(() => ShowIntervention(e));
+        }
+
+        private void ShowIntervention(ActivityResponse response)
+        {
+            // At most one popup at a time: a second would stack on top of the first.
+            if (_activePopup is { IsVisible: true })
             {
-                Console.WriteLine("Skipping popup: Invalid intervention response");
+                _activePopup.UpdateContent(response);
                 return;
             }
 
-            Dispatcher.Invoke(() =>
+            var popup = new AiInterventionWindow(response, _feedbackService)
             {
-                lock (_popupLock)  // FIX: Atomic lock to prevent race conditions.
-                {
-                    if (_activeAiPopup != null && _activeAiPopup.IsVisible)
-                    {
-                        Console.WriteLine("Popup already open, updating data...");
-                        _activeAiPopup.UpdateContent(e);
-                        return;
-                    }
+                Owner = Window.GetWindow(this),
+            };
 
-                    // Create new popup
-                    _activeAiPopup = new AiInterventionWindow(e, _feedbackService);
+            popup.UserActionSelected += (_, action) => _viewModel.HandleUserAction(response, action);
+            popup.Closed += (_, _) => _activePopup = null;
 
-                    // Subscribe to user action (centralized handling).
-                    _activeAiPopup.UserActionSelected += (s, action) => HandleUserAction(e, action);
-
-                    // FIX: Handle close to clear reference (use Deactivated for non-modal hide if needed).
-                    _activeAiPopup.Closed += (s, args) => _activeAiPopup = null;
-
-                    // Show dialog
-                    _activeAiPopup.Show();
-                }
-            });
-        }
-
-        // FIX: Forward to ViewModel for consistency; complete logging.
-        private void HandleUserAction(ActivityResponse e, AiUserAction action)
-        {
-            _viewModel.HandleUserAction(e, action);  // Delegate to ViewModel.
-            Console.WriteLine("User action handled in UI layer.");
+            _activePopup = popup;
+            popup.Show();
         }
     }
 }

@@ -1,152 +1,147 @@
-﻿using FocusAssistant.Enums;
-using FocusAssistant.Models;
+using FocusAssistant.Enums;
 using FocusAssistant.Models.Response_Models;
+using FocusAssistant.Services.Flask.Interfaces;
 using System;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
-using FocusAssistant.Services.Flask.Interfaces;
 
 namespace FocusAssistant.Views
 {
+    /// <summary>
+    /// Transient popup offering the agent's suggestion. Whatever the user does with
+    /// it — including closing it — is reported back as feedback so the agent learns.
+    /// </summary>
     public partial class AiInterventionWindow : Window
     {
-        private readonly ActivityResponse _activityResponse;
+        private const int TimeoutSeconds = 30;
+
         private readonly IFeedbackService _feedbackService;
         private readonly DispatcherTimer _timeoutTimer;
-        private readonly string _appName;
-        private readonly string _windowTitle;
-        private readonly bool _isProductive;
-        private const int TimeoutSeconds = 30;
-        private bool _feedbackSkippedLogged;  // Throttle skip logs.
-        private bool _isClosingFromAction;    // Flag for action-initiated close.
 
-        public event EventHandler<AiUserAction> UserActionSelected;
+        private ActivityResponse _activityResponse;
+        private bool _actionReported;
+
+        public event EventHandler<AiUserAction>? UserActionSelected;
 
         public AiInterventionWindow(ActivityResponse response, IFeedbackService feedbackService)
         {
+            ArgumentNullException.ThrowIfNull(response);
+
             InitializeComponent();
 
-            // Initialize timer for auto-close
-            _timeoutTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromSeconds(TimeoutSeconds)
-            };
+            _feedbackService = feedbackService ?? throw new ArgumentNullException(nameof(feedbackService));
+            _activityResponse = response;
+
+            _timeoutTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(TimeoutSeconds) };
             _timeoutTimer.Tick += TimeoutTimer_Tick;
             _timeoutTimer.Start();
 
             LoadData(response);
-            _feedbackService = feedbackService;
-            _activityResponse = response;
-            _feedbackSkippedLogged = false;  // Init throttle.
         }
 
-        // FIX: Simplified - Remove non-existent 'IsCancelable'. Always attempt to cancel manual closes.
+        /// <summary>
+        /// Closing counts as ignoring the suggestion.
+        /// </summary>
+        /// <remarks>
+        /// This used to cancel every close the user initiated, which trapped them in
+        /// a window with no working close button and blocked application shutdown.
+        /// </remarks>
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            if (!_isClosingFromAction)
-            {
-                e.Cancel = true;
-                Console.WriteLine("Manual close prevented; use action buttons.");
-            }
-            // If _isClosingFromAction is true, allow close without canceling.
+            _timeoutTimer.Stop();
+
+            if (!_actionReported)
+                ReportAction(AiUserAction.Ignored, closeWindow: false);
         }
 
-        private async void TimeoutTimer_Tick(object sender, EventArgs e)
+        private void TimeoutTimer_Tick(object? sender, EventArgs e) => Respond(AiUserAction.Ignored);
+
+        private void ActNow_Click(object sender, RoutedEventArgs e) => Respond(AiUserAction.ActedImmediately);
+
+        private void ActLater_Click(object sender, RoutedEventArgs e) => Respond(AiUserAction.ActedLater);
+
+        private void Dismiss_Click(object sender, RoutedEventArgs e) => Respond(AiUserAction.DismissedPolitely);
+
+        private void Ignore_Click(object sender, RoutedEventArgs e) => Respond(AiUserAction.Ignored);
+
+        private void Respond(AiUserAction action)
         {
             _timeoutTimer.Stop();
-            await SendFeedbackAsync(AiUserAction.Ignored);
-            RaiseUserAction(AiUserAction.Ignored);
+            ReportAction(action, closeWindow: true);
         }
 
-        private void RaiseUserAction(AiUserAction action)
+        private void ReportAction(AiUserAction action, bool closeWindow)
         {
-            _isClosingFromAction = true;  // Set flag to allow close.
+            if (_actionReported)
+                return;
+
+            _actionReported = true;
+
+            // Fire-and-forget: the popup should close immediately rather than wait
+            // on a network round trip. SendFeedbackAsync handles its own failures.
+            _ = SendFeedbackAsync(action);
             UserActionSelected?.Invoke(this, action);
-            this.Close();  // Now proceeds without cancellation.
-            _isClosingFromAction = false;  // Reset flag after close (optional, for safety).
+
+            if (closeWindow)
+                Close();
         }
 
+        /// <summary>Replaces the content when a newer intervention arrives.</summary>
         public void UpdateContent(ActivityResponse response)
         {
-            if (response == null) return;
-            _timeoutTimer.Stop();
+            if (response is null)
+                return;
+
+            // The previous suggestion went unanswered; record that before replacing it.
+            if (!_actionReported)
+            {
+                _actionReported = true;
+                _ = SendFeedbackAsync(AiUserAction.Ignored);
+            }
+
+            _activityResponse = response;
+            _actionReported = false;
             LoadData(response);
+
+            _timeoutTimer.Stop();
             _timeoutTimer.Start();
-            _feedbackSkippedLogged = false;  // Reset throttle on update.
-            _isClosingFromAction = false;    // Reset flag on update.
         }
 
         private void LoadData(ActivityResponse response)
         {
             AiMessageTextBlock.Text = response.InterventionMessage ?? "No message available.";
-            var detected = $"Detected Activity: {response.DistractionRisk:F1}";
-            var suggested = $"Suggested Action: {response.InterventionMessage ?? "None"}";
-            var fullSuggestion = $"{detected}\n\n{suggested}";
-            if (fullSuggestion.Length > 150)
-            {
-                fullSuggestion = fullSuggestion.Substring(0, 147) + "...";
-            }
-            SuggestionText.Text = fullSuggestion;
+
+            // Show the risk and the action the agent chose. The old version repeated
+            // the message here and labelled the risk score "Detected Activity".
+            SuggestionText.Text =
+                $"Distraction risk: {response.DistractionRisk:P0}\n" +
+                $"Suggested action: {Humanise(response.ActionTaken)}";
         }
 
-        // Add throttling for skip logs.
+        private static string Humanise(string? action) =>
+            string.IsNullOrWhiteSpace(action) ? "None" : action.Replace('_', ' ');
+
         private async Task SendFeedbackAsync(AiUserAction action)
         {
-            if (_activityResponse?.InterventionId == null)
-            {
-                if (!_feedbackSkippedLogged)
-                {
-                    Console.WriteLine("Skipping feedback: InterventionId is null");
-                    _feedbackSkippedLogged = true;
-                }
+            var interventionId = _activityResponse.InterventionId;
+            if (string.IsNullOrEmpty(interventionId))
                 return;
-            }
-            _feedbackSkippedLogged = false;
 
-            var feedback = new FeedbackRequest
-            {
-                InterventionId = _activityResponse.InterventionId,
-                Action = action.ToString(),
-                Helpful = action == AiUserAction.ActedImmediately || action == AiUserAction.ActedLater,
-                ProductivityChange = 0,
-            };
             try
             {
-                await _feedbackService.SendFeedbackAsync(feedback);
-                Console.WriteLine($"Feedback sent: InterventionId={feedback.InterventionId}, Action={feedback.Action}, Helpful={feedback.Helpful}");
+                await _feedbackService.SendFeedbackAsync(new FeedbackRequest
+                {
+                    InterventionId = interventionId,
+                    Action = action.ToString(),
+                    Helpful = action is AiUserAction.ActedImmediately or AiUserAction.ActedLater,
+                    ProductivityChange = 0,
+                });
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Failed to send feedback: {ex.Message}");
             }
-        }
-
-        private async void ActNow_Click(object sender, RoutedEventArgs e)
-        {
-            _timeoutTimer.Stop();
-            await SendFeedbackAsync(AiUserAction.ActedImmediately);
-            RaiseUserAction(AiUserAction.ActedImmediately);
-        }
-
-        private async void ActLater_Click(object sender, RoutedEventArgs e)
-        {
-            _timeoutTimer.Stop();
-            await SendFeedbackAsync(AiUserAction.ActedLater);
-            RaiseUserAction(AiUserAction.ActedLater);
-        }
-
-        private async void Dismiss_Click(object sender, RoutedEventArgs e)
-        {
-            _timeoutTimer.Stop();
-            await SendFeedbackAsync(AiUserAction.DismissedPolitely);
-            RaiseUserAction(AiUserAction.DismissedPolitely);
-        }
-
-        private async void Ignore_Click(object sender, RoutedEventArgs e)
-        {
-            _timeoutTimer.Stop();
-            await SendFeedbackAsync(AiUserAction.Ignored);
-            RaiseUserAction(AiUserAction.Ignored);
         }
     }
 }

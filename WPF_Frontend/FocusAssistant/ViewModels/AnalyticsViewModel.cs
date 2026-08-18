@@ -1,63 +1,46 @@
-﻿using FocusAssistant.Models;
-using FocusAssistant.Services.Flask.Interfaces;
+using FocusAssistant.Models;
 using FocusAssistant.SQL_analytics;
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.IO;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 
 namespace FocusAssistant.ViewModels
 {
-    public class AnalyticsViewModel : INotifyPropertyChanged
+    /// <summary>Backs the Analytics view: daily totals from the local database.</summary>
+    public class AnalyticsViewModel : ObservableObject
     {
-        private readonly AnalyticsServiceSQL _analyticsServiceSQL; 
-        private SessionStatistics _statistics; private List<(string AppName, TimeSpan Duration)> _topApps; 
-        private DateTime _selectedDate = DateTime.Today;
-        public AnalyticsViewModel(AnalyticsServiceSQL analyticsService)
-        {
-            _analyticsServiceSQL = analyticsService ?? throw new ArgumentNullException(nameof(analyticsService));
-            LoadDataCommand = new AsyncRelayCommand(async () => await LoadDataAsync());
-            DownloadReportCommand = new AsyncRelayCommand(async () => await DownloadReportAsync());
+        private readonly AnalyticsServiceSQL _analytics;
 
-            // Initial load
+        private SessionStatistics _statistics = new();
+        private List<AppUsageSummary> _topApps = new();
+        private DateTime _selectedDate = DateTime.Today;
+        private string _status = string.Empty;
+
+        public AnalyticsViewModel(AnalyticsServiceSQL analytics)
+        {
+            _analytics = analytics ?? throw new ArgumentNullException(nameof(analytics));
+
+            LoadDataCommand = new AsyncRelayCommand(LoadDataAsync);
+            DownloadReportCommand = new AsyncRelayCommand(DownloadReportAsync);
+
             _ = LoadDataAsync();
         }
 
-        public SessionStatistics Statistics
-        {
-            get => _statistics;
-            set
-            {
-                _statistics = value;
-                OnPropertyChanged();
-            }
-        }
-
-        public List<(string AppName, TimeSpan Duration)> TopApps
-        {
-            get => _topApps;
-            set
-            {
-                _topApps = value;
-                OnPropertyChanged();
-            }
-        }
+        public SessionStatistics Statistics { get => _statistics; set => SetProperty(ref _statistics, value); }
+        public List<AppUsageSummary> TopApps { get => _topApps; set => SetProperty(ref _topApps, value); }
+        public string Status { get => _status; set => SetProperty(ref _status, value); }
 
         public DateTime SelectedDate
         {
             get => _selectedDate;
             set
             {
-                _selectedDate = value;
-                OnPropertyChanged();
-                _ = LoadDataAsync(); // Use fire-and-forget for async
+                if (SetProperty(ref _selectedDate, value))
+                    _ = LoadDataAsync();
             }
         }
 
@@ -68,13 +51,18 @@ namespace FocusAssistant.ViewModels
         {
             try
             {
-                Statistics = await _analyticsServiceSQL.GetDailyStatisticsAsync(SelectedDate);
-                TopApps = await _analyticsServiceSQL.GetTopAppsAsync(SelectedDate);
+                Statistics = await _analytics.GetDailyStatisticsAsync(SelectedDate);
+                TopApps = await _analytics.GetTopAppsAsync(SelectedDate);
+                Status = Statistics.TotalSessions == 0
+                    ? $"No sessions recorded on {SelectedDate:yyyy-MM-dd}"
+                    : string.Empty;
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error loading data: {ex.Message}", "Error",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
+                // Surfaced as inline status rather than a modal: this also runs from
+                // the constructor, where a dialog would block the view from loading.
+                Status = $"Could not load data: {ex.Message}";
+                Console.WriteLine($"Analytics load failed: {ex}");
             }
         }
 
@@ -82,37 +70,24 @@ namespace FocusAssistant.ViewModels
         {
             try
             {
-                var saveFileDialog = new SaveFileDialog
+                var dialog = new SaveFileDialog
                 {
                     Filter = "CSV files (*.csv)|*.csv",
-                    FileName = $"FocusAssistant_Report_{SelectedDate:yyyy-MM-dd}.csv"
+                    FileName = $"FocusAssistant_Report_{SelectedDate:yyyy-MM-dd}.csv",
                 };
 
-                if (saveFileDialog.ShowDialog() == true)
-                {
-                    var csvContent = await _analyticsServiceSQL.GenerateCsvReportAsync(SelectedDate);
-                    await File.WriteAllTextAsync(saveFileDialog.FileName, csvContent);
+                if (dialog.ShowDialog() != true)
+                    return;
 
-                    MessageBox.Show("Report saved successfully!", "Success",
-                        MessageBoxButton.OK, MessageBoxImage.Information);
-                }
+                var csv = await _analytics.GenerateCsvReportAsync(SelectedDate);
+                await File.WriteAllTextAsync(dialog.FileName, csv);
+                Status = $"Report saved to {dialog.FileName}";
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error generating report: {ex.Message}", "Error",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Could not save the report.\n\n{ex.Message}",
+                    "Export failed", MessageBoxButton.OK, MessageBoxImage.Error);
             }
-        }
-
-        public event PropertyChangedEventHandler PropertyChanged;
-
-        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
     }
 }
-
-
-
-

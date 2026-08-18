@@ -1,87 +1,51 @@
-﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace FocusAssistant.ViewModels
 {
-    public class DashboardViewModel : INotifyPropertyChanged
+    /// <summary>
+    /// Backs the Dashboard view with today's headline figures.
+    /// </summary>
+    public class DashboardViewModel : ObservableObject
     {
-        public event PropertyChangedEventHandler PropertyChanged;
-        private readonly DashboardViewModel _viewModel;
+        private readonly Services.Session.Interfaces.IReportGenerator _reportGenerator;
 
-        // Fields for the properties
-        private string _productivityRate;
-        private string _totalActivities;
-        private string _recentInterventions;
-        private ObservableCollection<KeyValuePair<string, int>> _topApps = new ObservableCollection<KeyValuePair<string, int>>();
-        private int _topAppsCount;
+        private string _productivityRate = "0%";
+        private string _totalActivities = "0";
+        private string _recentInterventions = "0";
 
-
-         
-         
-        public DashboardViewModel()
+        public DashboardViewModel(Services.Session.Interfaces.IReportGenerator reportGenerator)
         {
-            // Initial values, could be set to defaults or empty state
-            _productivityRate = "0%";
-            _totalActivities = "0";
-            _recentInterventions = "0";
-            _topAppsCount = 0;
+            _reportGenerator = reportGenerator;
         }
 
-        // Parameterized constructor (optional, for passing data directly)
-        public DashboardViewModel(string productivityRate, string totalActivities, string recentInterventions, ObservableCollection<KeyValuePair<string, int>> topApps)
-        {
-            _productivityRate = productivityRate;
-            _totalActivities = totalActivities;
-            _recentInterventions = recentInterventions;
-            _topApps = topApps;
-            _topAppsCount = topApps.Count;
-        }
+        public string ProductivityRate { get => _productivityRate; set => SetProperty(ref _productivityRate, value); }
+        public string TotalActivities { get => _totalActivities; set => SetProperty(ref _totalActivities, value); }
+        public string RecentInterventions { get => _recentInterventions; set => SetProperty(ref _recentInterventions, value); }
 
-        protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
+        public ObservableCollection<KeyValuePair<string, int>> TopApps { get; } = new();
 
-        protected bool SetProperty<T>(ref T field, T value, [CallerMemberName] string propertyName = null)
-        {
-            if (EqualityComparer<T>.Default.Equals(field, value)) return false;
-            field = value;
-            OnPropertyChanged(propertyName);
-            return true;
-        }
+        public int TopAppsCount => TopApps.Count;
 
-        // Properties for binding
-        public string ProductivityRate
+        /// <summary>
+        /// Loads today's figures. The previous version had this method body
+        /// commented out, so the dashboard always displayed zeros.
+        /// </summary>
+        public async Task LoadAsync()
         {
-            get => _productivityRate;
-            set => SetProperty(ref _productivityRate, value);
-        }
+            var report = await _reportGenerator.GetReportFlask();
 
-        public string TotalActivities
-        {
-            get => _totalActivities;
-            set => SetProperty(ref _totalActivities, value);
-        }
+            ProductivityRate = $"{report.ProductivityRate:F0}%";
+            TotalActivities = report.TotalActivities.ToString();
+            RecentInterventions = report.RecentInterventions.ToString();
 
-        public string RecentInterventions
-        {
-            get => _recentInterventions;
-            set => SetProperty(ref _recentInterventions, value);
-        }
+            TopApps.Clear();
+            foreach (var app in report.TopApps.OrderByDescending(a => a.Value))
+                TopApps.Add(app);
 
-        public ObservableCollection<KeyValuePair<string, int>> TopApps
-        {
-            get => _topApps;
-            set => SetProperty(ref _topApps, value);
-        }
-
-        public int TopAppsCount
-        {
-            get => _topAppsCount;
-            set => SetProperty(ref _topAppsCount, value);
+            OnPropertyChanged(nameof(TopAppsCount));
         }
     }
 }

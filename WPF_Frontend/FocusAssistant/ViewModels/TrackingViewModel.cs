@@ -1,203 +1,109 @@
-﻿using FocusAssistant.Enums;
+using FocusAssistant.Enums;
 using FocusAssistant.Models;
 using FocusAssistant.Models.Response_Models;
 using FocusAssistant.Services.Application_Monitoring;
 using FocusAssistant.Services.Application_Monitoring.Interfaces;
-using FocusAssistant.Services.Flask.Interfaces;
-using FocusAssistant.Services.Interfaces;
 using FocusAssistant.Services.Models.Events;
 using FocusAssistant.Services.Session.Interfaces;
-using FocusAssistant.Views;
-using MailChimp.Net.Models;
-using OpenTK.Platform;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
-using System.Windows.Threading;
 
 namespace FocusAssistant.ViewModels
 {
-    public class TrackingViewModel : INotifyPropertyChanged,IDisposable
+    /// <summary>Backs the Tracking view: live status, the activity log, and today's totals.</summary>
+    public class TrackingViewModel : ObservableObject, IDisposable
     {
-        private bool _isTracking;
-        private string _statusText;
-        private string _productivityRate;
-        private string _recentInterventions;
-        private string _productivityScore;
-        private string _aiStatus;
-        private string _date;
-        private List<string> _topApps;
-        private string _totalActivities;
-        private string _currentApp;
-        private string _currentWindow;
-        private string _windowStatusText;
-        public ActivityResponse AiIntervention { get; private set; }
+        // The log is a live view, not storage; the database holds the full history.
+        private const int MaxActivityLogEntries = 200;
 
-        private readonly IAnalyticsService _analyticsService;
-        private readonly IReportGenerator _reportGenerator;
         private readonly WindowTracker _windowTracker;
         private readonly IWindowMonitor _windowMonitor;
         private readonly ISessionManager _sessionManager;
+        private readonly IReportGenerator _reportGenerator;
+
+        private bool _isTracking;
+        private string _statusText = "Ready to track";
+        private string _productivityScore = "0.0%";
+        private string _recentInterventions = "0";
+        private string _aiStatus = "Ready";
+        private string _totalActivities = "0";
+        private string _currentApp = "No application detected";
+        private string _currentWindow = "No window detected";
+        private string _date = DateTime.Today.ToString("yyyy-MM-dd");
+        private List<string> _topApps = new();
+        private bool _disposed;
+
         public event EventHandler<ActivityResponse>? AiInterventionOccurred;
-        private readonly IFeedbackService _feedbackService;
 
         public TrackingViewModel(
             WindowTracker windowTracker,
-            IAnalyticsService analyticsService,
-            IReportGenerator reportGenerator,
             IWindowMonitor windowMonitor,
-            ISessionManager sessionManager,IFeedbackService feedbackService)
+            ISessionManager sessionManager,
+            IReportGenerator reportGenerator)
         {
-            _windowTracker = windowTracker;
-            _analyticsService = analyticsService;
-            _reportGenerator = reportGenerator;
-            _windowMonitor = windowMonitor;
-            _sessionManager = sessionManager;
-            _feedbackService = feedbackService;
+            _windowTracker = windowTracker ?? throw new ArgumentNullException(nameof(windowTracker));
+            _windowMonitor = windowMonitor ?? throw new ArgumentNullException(nameof(windowMonitor));
+            _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
+            _reportGenerator = reportGenerator ?? throw new ArgumentNullException(nameof(reportGenerator));
 
-            // Initialize collections
-            ActivityLog = new ObservableCollection<ActivityLogItem>();
+            StartTrackingCommand = new AsyncRelayCommand(StartTrackingAsync, () => !IsTracking);
+            StopTrackingCommand = new AsyncRelayCommand(StopTrackingAsync, () => IsTracking);
 
-            // Initialize commands
-            StartTrackingCommand = new AsyncRelayCommand(StartTrackingAsync);
-            StopTrackingCommand = new AsyncRelayCommand(StopTrackingAsync);
-
-            // Initialize default values
-            StatusText = "Ready to track";
-            ProductivityScore = "0.0%";
-            RecentInterventions = "0h";
-            AIStatus = "Ready";
-            TotalActivities = "0";
-            CurrentApp = "No application detected";
-            CurrentWindow = "No window detected";
-
-          
-            
             _windowMonitor.WindowChanged += OnWindowChanged;
             _sessionManager.AiInterventionReceived += OnAiInterventionReceived;
-           
-        }
-
-        private void OnAiInterventionReceived(object? sender, ActivityResponse e)
-        {
-            // Early skip for invalid responses to prevent empty popups/logs
-            if (e == null || e.InterventionId == null || string.IsNullOrEmpty(e.InterventionMessage))
-            {
-                Console.WriteLine("Skipping intervention: Invalid response (null ID or empty message)");
-                return;
-            }
-
-            AiInterventionOccurred?.Invoke(this, e);  // Forward to UI layer for handling
-        }
-
-
-        public void HandleUserAction(ActivityResponse e, AiUserAction action)
-        {
-            Console.WriteLine($"User responded: {action} for '{e.InterventionMessage ?? "No message"}'");
-            // TODO: Send this data to your backend or RL service
-            // Example:
-            // await _sessionManager.SaveUserActionAsync(response, action);
-
-            // Optional: Update UI
-            // _viewModel.StatusText = $"Last action: {action}";
         }
 
         #region Properties
+
         public bool IsTracking
         {
             get => _isTracking;
-            set { _isTracking = value; OnPropertyChanged(); }
+            set
+            {
+                if (!SetProperty(ref _isTracking, value))
+                    return;
+
+                (StartTrackingCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+                (StopTrackingCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+            }
         }
 
-        public string StatusText
-        {
-            get => _statusText;
-            set { _statusText = value; OnPropertyChanged(); }
-        }
+        public string StatusText { get => _statusText; set => SetProperty(ref _statusText, value); }
+        public string ProductivityScore { get => _productivityScore; set => SetProperty(ref _productivityScore, value); }
+        public string RecentInterventions { get => _recentInterventions; set => SetProperty(ref _recentInterventions, value); }
+        public string AIStatus { get => _aiStatus; set => SetProperty(ref _aiStatus, value); }
+        public string TotalActivities { get => _totalActivities; set => SetProperty(ref _totalActivities, value); }
+        public string CurrentApp { get => _currentApp; set => SetProperty(ref _currentApp, value); }
+        public string CurrentWindow { get => _currentWindow; set => SetProperty(ref _currentWindow, value); }
+        public string Date { get => _date; set => SetProperty(ref _date, value); }
+        public List<string> TopApps { get => _topApps; set => SetProperty(ref _topApps, value); }
 
-        public string ProductivityScore
-        {
-            get => _productivityScore;
-            set { _productivityScore = value; OnPropertyChanged(); }
-        }
+        public ObservableCollection<ActivityLogItem> ActivityLog { get; } = new();
 
-        public string RecentInterventions
-        {
-            get => _recentInterventions;
-            set { _recentInterventions = value; OnPropertyChanged(); }
-        }
-
-        public string AIStatus
-        {
-            get => _aiStatus;
-            set { _aiStatus = value; OnPropertyChanged(); }
-        }
-
-        public string TotalActivities
-        {
-            get => _totalActivities;
-            set { _totalActivities = value; OnPropertyChanged(); }
-        }
-
-        public string CurrentApp
-        {
-            get => _currentApp;
-            set { _currentApp = value; OnPropertyChanged(); }
-        }
-
-        public string CurrentWindow
-        {
-            get => _currentWindow;
-            set { _currentWindow = value; OnPropertyChanged(); }
-        }
-
-        public string WindowStatus
-        {
-            get => _windowStatusText;
-            set { _windowStatusText = value; OnPropertyChanged(); }
-        }
-
-        public string Date
-        {
-            get => _date;
-            set { _date = value; OnPropertyChanged(); }
-        }
-
-        public List<string> TopApps
-        {
-            get => _topApps;
-            set { _topApps = value; OnPropertyChanged(); }
-        }
-
-        public ObservableCollection<ActivityLogItem> ActivityLog { get; }
-        #endregion
-
-        #region Commands
         public ICommand StartTrackingCommand { get; }
         public ICommand StopTrackingCommand { get; }
+
         #endregion
 
-        #region Command Handlers
         private async Task StartTrackingAsync()
         {
             try
             {
-                StatusText = "Actively tracking...";
-                IsTracking = true;
-                AIStatus = "Active";
                 await _windowTracker.StartTrackingAsync();
-
-                // Load initial analytics
-               // await LoadAnalyticsAsync();
+                IsTracking = true;
+                StatusText = "Actively tracking";
+                AIStatus = "Active";
+                await LoadAnalyticsAsync();
             }
             catch (Exception ex)
             {
-                StatusText = $"Error: {ex.Message}";
+                IsTracking = false;
+                StatusText = $"Could not start tracking: {ex.Message}";
                 AIStatus = "Error";
             }
         }
@@ -206,77 +112,84 @@ namespace FocusAssistant.ViewModels
         {
             try
             {
-                StatusText = "Tracking stopped";
-                IsTracking = false;
-                AIStatus = "Stopped";
                 await _windowTracker.StopTrackingAsync();
+                IsTracking = false;
+                StatusText = "Tracking stopped";
+                AIStatus = "Stopped";
+                await LoadAnalyticsAsync();
             }
             catch (Exception ex)
             {
-                StatusText = $"Error: {ex.Message}";
+                StatusText = $"Could not stop tracking: {ex.Message}";
                 AIStatus = "Error";
             }
         }
-        #endregion
 
-        #region Analytics Loading
+        /// <summary>Refreshes the headline figures from the backend or local history.</summary>
         public async Task LoadAnalyticsAsync()
         {
             try
             {
-                
                 var report = await _reportGenerator.GetReportFlask();
 
                 ProductivityScore = $"{report.ProductivityRate:F1}%";
-                RecentInterventions = $"{report.RecentInterventions:F1}h";
-                AIStatus = report.Status ?? "Active";
-                Date = report.Date;
-                TopApps = report.TopApps ?? new List<string>();
-                TotalActivities = ActivityLog.Count.ToString();
-                Console.WriteLine("Flask request loaded");
-                
+                // A count, not a duration. This used to be rendered as "0h".
+                RecentInterventions = report.RecentInterventions.ToString();
+                AIStatus = report.Status == "success" ? "Active" : "Unavailable";
+                Date = report.Date ?? DateTime.Today.ToString("yyyy-MM-dd");
+                TopApps = report.TopApps.Keys.ToList();
+                TotalActivities = report.TotalActivities.ToString();
             }
             catch (Exception ex)
             {
-                StatusText = $"Error loading analytics: {ex.Message}";
+                StatusText = $"Could not load analytics: {ex.Message}";
                 AIStatus = "Error";
-                Console.WriteLine("Flask request loaded failed");
             }
         }
-        #endregion
 
-        #region Event Handlers
-        private void OnAppSwitched(object sender, AppUsage app)
+        private void OnAiInterventionReceived(object? sender, ActivityResponse e)
         {
-            CurrentApp = app.AppName;
+            if (e?.InterventionId is null || string.IsNullOrEmpty(e.InterventionMessage))
+                return;
 
-            ActivityLog.Add(new ActivityLogItem
+            AiInterventionOccurred?.Invoke(this, e);
+        }
+
+        private void OnWindowChanged(object? sender, AppWindowChangedEventArgs e)
+        {
+            // Raised on a polling thread; ObservableCollection must only be mutated
+            // on the dispatcher thread or the ListBox binding throws.
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher is null)
+                return;
+
+            dispatcher.InvokeAsync(() =>
             {
-                AppName = app.AppName,
-                DurationText = $"{app.Duration.TotalMinutes:F1} min"
+                CurrentApp = e.CurrentAppName;
+                CurrentWindow = e.CurrentWindowTitle ?? string.Empty;
+                StatusText = $"Active window: {e.CurrentWindowTitle}";
+
+                ActivityLog.Insert(0, new ActivityLogItem
+                {
+                    AppName = e.CurrentAppName,
+                    WindowTitle = e.CurrentWindowTitle ?? string.Empty,
+                    TimeText = e.ChangeTime.ToString("HH:mm:ss"),
+                    DurationText = "in progress",
+                });
+
+                while (ActivityLog.Count > MaxActivityLogEntries)
+                    ActivityLog.RemoveAt(ActivityLog.Count - 1);
+
+                TotalActivities = ActivityLog.Count.ToString();
             });
-
-            // Update total activities count
-            TotalActivities = ActivityLog.Count.ToString();
-
-            // Update status
-            StatusText = $"Switched to {app.AppName}";
         }
 
-        private void 
-            OnWindowChanged(object sender, AppWindowChangedEventArgs window)
+        /// <summary>Records how the user answered an intervention.</summary>
+        public void HandleUserAction(ActivityResponse response, AiUserAction action)
         {
-            CurrentWindow = window.CurrentWindowTitle;
-            CurrentApp = window.CurrentAppName;
-            
-            StatusText = $"Active window: {window.CurrentWindowTitle}";
-        }
-        #endregion
-
-        #region Public Methods
-        public async void RefreshDataAsync()
-        {
-            await LoadAnalyticsAsync();
+            // Feedback is sent by AiInterventionWindow, which owns the intervention id.
+            StatusText = $"Last suggestion: {action}";
+            Console.WriteLine($"User responded {action} to '{response.InterventionMessage}'.");
         }
 
         public void ClearActivityLog()
@@ -284,23 +197,18 @@ namespace FocusAssistant.ViewModels
             ActivityLog.Clear();
             TotalActivities = "0";
         }
-        #endregion
-
-        public event PropertyChangedEventHandler PropertyChanged;
-        protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
-            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
         public void Dispose()
         {
-            _windowMonitor.StopMonitoring();
+            if (_disposed)
+                return;
+
+            _disposed = true;
+
+            // The monitor and session manager are singletons: without this the view
+            // model stays reachable from them for the life of the process.
             _windowMonitor.WindowChanged -= OnWindowChanged;
+            _sessionManager.AiInterventionReceived -= OnAiInterventionReceived;
         }
     }
-
-    public class ActivityLogItem
-    {
-        public string AppName { get; set; }
-        public string DurationText { get; set; }
-    }
-
 }

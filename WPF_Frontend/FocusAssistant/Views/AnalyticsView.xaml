@@ -41,8 +41,11 @@
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal" Margin="0,2">
-                                <TextBlock Text="{Binding Item1}" Width="200" TextTrimming="CharacterEllipsis"/>
-                                <TextBlock Text="{Binding Item2, StringFormat='Duration: {0:hh\\:mm\\:ss}'}" 
+                                <!-- Named properties, not Item1/Item2: the list held
+                                     ValueTuples, whose members are fields, and WPF
+                                     bindings only see properties. -->
+                                <TextBlock Text="{Binding AppName}" Width="200" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding Duration, StringFormat='Duration: {0:hh\\:mm\\:ss}'}"
                                            Margin="10,0,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
                         </DataTemplate>
