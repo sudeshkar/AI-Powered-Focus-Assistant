@@ -11,10 +11,10 @@ namespace FocusAssistant.Models.Response_Models
     public class ActivityRequest
     {
         [JsonPropertyName("app_name")]
-        public string AppName { get; set; }
+        public string AppName { get; set; } = string.Empty;
 
         [JsonPropertyName("window_title")]
-        public string WindowTitle { get; set; }
+        public string WindowTitle { get; set; } = string.Empty;
 
         [JsonPropertyName("is_productive")]
         public bool IsProductive { get; set; }

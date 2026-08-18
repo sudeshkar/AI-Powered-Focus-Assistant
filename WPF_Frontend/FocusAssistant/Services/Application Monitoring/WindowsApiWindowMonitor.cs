@@ -1,153 +1,164 @@
-﻿using FocusAssistant.Services.Application_Monitoring.Interfaces;
+using FocusAssistant.Services.Application_Monitoring.Interfaces;
 using FocusAssistant.Services.Models.Events;
-using Microsoft.Win32;
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading.Tasks;
+using System.Threading;
 
 namespace FocusAssistant.Services.Application_Monitoring
 {
+    /// <summary>
+    /// Polls the foreground window and raises <see cref="WindowChanged"/> when the
+    /// user moves to a different application.
+    /// </summary>
     public class WindowsApiWindowMonitor : IWindowMonitor, IDisposable
     {
-        // Windows API imports
         [DllImport("user32.dll")]
         private static extern IntPtr GetForegroundWindow();
 
-        [DllImport("user32.dll")]
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
 
-        [DllImport("user32.dll")]
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern int GetWindowTextLength(IntPtr hWnd);
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
-        private Timer _monitoringTimer;
-        private string _lastAppName;
-        private string _lastWindowTitle;
-        private bool _isMonitoring = false;
+        private readonly object _gate = new();
+        private Timer? _monitoringTimer;
+        private string? _lastAppName;
+        private string? _lastWindowTitle;
+        private bool _isMonitoring;
+
+        // Guards against overlapping callbacks: the poll does a cross-process
+        // lookup, which can outrun a short interval.
+        private int _pollInFlight;
 
         public bool IsMonitoring => _isMonitoring;
 
         public TimeSpan PollingInterval { get; }
 
-        public event EventHandler<AppWindowChangedEventArgs> WindowChanged;
+        public event EventHandler<AppWindowChangedEventArgs>? WindowChanged;
 
         public WindowsApiWindowMonitor(TimeSpan? pollingInterval = null)
         {
             PollingInterval = pollingInterval ?? TimeSpan.FromSeconds(1);
-            Console.WriteLine($"Initialized with PollingInterval: {PollingInterval.TotalSeconds} seconds");
         }
 
-        public (string appName, string windowTitle) GetActiveWindow()
+        public (string? appName, string? windowTitle) GetActiveWindow()
         {
             try
             {
-                IntPtr handle = GetForegroundWindow();
+                var handle = GetForegroundWindow();
                 if (handle == IntPtr.Zero)
                     return (null, null);
 
-                // Get window title
-                int length = GetWindowTextLength(handle);
-                if (length == 0)
+                var length = GetWindowTextLength(handle);
+                var title = new StringBuilder(length + 1);
+                if (length > 0)
+                    GetWindowText(handle, title, title.Capacity);
+
+                GetWindowThreadProcessId(handle, out var processId);
+                if (processId == 0)
                     return (null, null);
 
-                StringBuilder windowTitle = new StringBuilder(length + 1);
-                GetWindowText(handle, windowTitle, windowTitle.Capacity);
-
-                // Get process name
-                GetWindowThreadProcessId(handle, out uint processId);
-                using (Process process = Process.GetProcessById((int)processId))
-                {
-                    return (process.ProcessName, windowTitle.ToString());
-                }
+                using var process = Process.GetProcessById((int)processId);
+                return (process.ProcessName, title.ToString());
+            }
+            catch (ArgumentException)
+            {
+                // The process exited between the handle lookup and GetProcessById.
+                return (null, null);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"❌ Error getting active window: {ex.Message}");
+                Console.WriteLine($"Error reading active window: {ex.Message}");
                 return (null, null);
             }
         }
 
         public void StartMonitoring()
         {
-            if (_isMonitoring)
+            lock (_gate)
             {
-                Console.WriteLine("WindowMonitor already monitoring, skipping start.");
-                return;
-            }
-            _isMonitoring = true;
-            var (appName, windowTitle) = GetActiveWindow();
-            _lastAppName = appName;
-            _lastWindowTitle = windowTitle;
-            _monitoringTimer = new Timer(CheckWindowChange, null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
-            Console.WriteLine($"WindowMonitor started at {DateTime.Now:HH:mm:ss.fff}");
-        }
+                if (_isMonitoring)
+                    return;
 
+                _isMonitoring = true;
+                (_lastAppName, _lastWindowTitle) = GetActiveWindow();
+
+                // Honour the configured interval. This used to hard-code one second,
+                // making PollingInterval decorative.
+                _monitoringTimer = new Timer(CheckWindowChange, null, PollingInterval, PollingInterval);
+                Console.WriteLine($"Window monitor started (every {PollingInterval.TotalSeconds:0.#}s).");
+            }
+        }
 
         public void StopMonitoring()
         {
-            if (!_isMonitoring)
+            lock (_gate)
             {
-                Console.WriteLine("WindowMonitor not monitoring, skipping stop.");
+                if (!_isMonitoring)
+                    return;
+
+                _isMonitoring = false;
+                _monitoringTimer?.Dispose();
+                _monitoringTimer = null;
+                Console.WriteLine("Window monitor stopped.");
+            }
+        }
+
+        private void CheckWindowChange(object? state)
+        {
+            // Drop this tick if the previous one is still running.
+            if (Interlocked.Exchange(ref _pollInFlight, 1) == 1)
                 return;
-            }
-            _isMonitoring = false;
+
             try
             {
-                if (_monitoringTimer != null)
-                {
-                    _monitoringTimer.Change(Timeout.Infinite, Timeout.Infinite);
-                    _monitoringTimer.Dispose();
-                    _monitoringTimer = null;
-                    Console.WriteLine($"WindowMonitor stopped at {DateTime.Now:HH:mm:ss.fff}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error stopping WindowMonitor: {ex.Message}");
-            }
-        }
-        private void CheckWindowChange(object state)
-        {
-            try
-            {
+                if (!_isMonitoring)
+                    return;
+
                 var (currentApp, currentTitle) = GetActiveWindow();
+                if (string.IsNullOrEmpty(currentApp))
+                    return;
 
-                if (string.IsNullOrEmpty(currentApp)) return;
-
-                // Check if window changed
-                if (_lastAppName != currentApp || _lastWindowTitle != currentTitle)
+                // Only an application switch counts. Firing on title changes too
+                // meant every keystroke that updated a document title created an
+                // AppUsage row and a backend round-trip.
+                if (string.Equals(_lastAppName, currentApp, StringComparison.OrdinalIgnoreCase))
                 {
-                    var eventArgs = new AppWindowChangedEventArgs
-                    {
-                        PreviousAppName = _lastAppName,
-                        PreviousWindowTitle = _lastWindowTitle,
-                        CurrentAppName = currentApp,
-                        CurrentWindowTitle = currentTitle,
-                        ChangeTime = DateTime.Now
-                    };
-
-                    _lastAppName = currentApp;
                     _lastWindowTitle = currentTitle;
-
-                    WindowChanged?.Invoke(this, eventArgs);
+                    return;
                 }
+
+                var args = new AppWindowChangedEventArgs
+                {
+                    PreviousAppName = _lastAppName,
+                    PreviousWindowTitle = _lastWindowTitle,
+                    CurrentAppName = currentApp,
+                    CurrentWindowTitle = currentTitle,
+                    ChangeTime = DateTime.Now,
+                };
+
+                _lastAppName = currentApp;
+                _lastWindowTitle = currentTitle;
+
+                WindowChanged?.Invoke(this, args);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"❌ Error in window change detection: {ex.Message}");
+                // A throw here would take down the timer thread.
+                Console.WriteLine($"Error in window change detection: {ex.Message}");
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _pollInFlight, 0);
             }
         }
 
-        public void Dispose()
-        {
-            StopMonitoring();
-            Console.WriteLine($"WindowMonitor disposed at {DateTime.Now:HH:mm:ss.fff}");
-        }
+        public void Dispose() => StopMonitoring();
     }
 }

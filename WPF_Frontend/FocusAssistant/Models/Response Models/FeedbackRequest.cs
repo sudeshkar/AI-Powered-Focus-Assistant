@@ -11,13 +11,13 @@ namespace FocusAssistant.Models.Response_Models
     public class FeedbackRequest
     {
         [JsonPropertyName("intervention_id")]
-        public string InterventionId { get; set; }
+        public string InterventionId { get; set; } = string.Empty;
 
         [JsonPropertyName("helpful")]
         public bool Helpful { get; set; }
 
         [JsonPropertyName("action")]
-        public string Action { get; set; }
+        public string Action { get; set; } = string.Empty;
 
         [JsonPropertyName("productivity_change")]
         public int ProductivityChange { get; set; }

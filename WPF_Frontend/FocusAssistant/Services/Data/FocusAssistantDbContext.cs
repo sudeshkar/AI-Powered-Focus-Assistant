@@ -19,20 +19,24 @@ namespace FocusAssistant.Data
         }
 
 
+        /// <summary>
+        /// Fallback for design-time tooling. At runtime the connection is supplied
+        /// by the DbContext factory registered in App.xaml.cs.
+        /// </summary>
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            if (!optionsBuilder.IsConfigured)
-            {
-                var dbPath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "FocusAssistant",
-                    "focusassistant.db"
-                );
-                Directory.CreateDirectory(Path.GetDirectoryName(dbPath));
-                optionsBuilder.UseSqlite($"Data Source={dbPath}")
-                    .EnableSensitiveDataLogging() // For debugging
-                    .EnableDetailedErrors();
-            }
+            if (optionsBuilder.IsConfigured)
+                return;
+
+            var dbPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "FocusAssistant",
+                "focusassistant.db");
+
+            // EnableSensitiveDataLogging is deliberately not set: it writes parameter
+            // values, and those parameters include window titles.
+            Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+            optionsBuilder.UseSqlite($"Data Source={dbPath}");
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)

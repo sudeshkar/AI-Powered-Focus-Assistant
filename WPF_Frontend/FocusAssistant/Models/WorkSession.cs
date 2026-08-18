@@ -1,25 +1,24 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace FocusAssistant.Models
 {
+    /// <summary>A single tracked stretch of work, holding the app usages within it.</summary>
     public class WorkSession
     {
         [Key]
         public string wID { get; set; } = Guid.NewGuid().ToString();
 
-        // Foreign key to UserSession
-        public string SessionId { get; set; }
+        public string SessionId { get; set; } = string.Empty;
 
-        [ForeignKey("SessionId")]
-
-        [System.Text.Json.Serialization.JsonIgnore]
-        public UserSession UserSession { get; set; }
+        [ForeignKey(nameof(SessionId))]
+        [JsonIgnore]
+        public UserSession? UserSession { get; set; }
 
         public DateTime StartTime { get; set; }
         public DateTime EndTime { get; set; }
@@ -30,40 +29,46 @@ namespace FocusAssistant.Models
         public double ProductivityScore { get; set; }
         public int AppSwitches { get; set; }
 
-        // Related data
-        public List<AppUsage> AppUsages { get; set; } = new List<AppUsage>();
-        public List<RLInteraction> RLInteractions { get; set; } = new List<RLInteraction>();
+        public List<AppUsage> AppUsages { get; set; } = new();
+        public List<RLInteraction> RLInteractions { get; set; } = new();
 
-        // Store TopApps as JSON
-        public string? TopAppsJson { get; set; } = "[]";
+        /// <summary>SQLite has no list type, so this is stored as a JSON array.</summary>
+        public string TopAppsJson { get; set; } = "[]";
 
         [NotMapped]
         public List<string> TopApps
         {
-            get => string.IsNullOrEmpty(TopAppsJson)
-                ? new List<string>()
-                : System.Text.Json.JsonSerializer.Deserialize<List<string>>(TopAppsJson);
+            get
+            {
+                if (string.IsNullOrWhiteSpace(TopAppsJson))
+                    return new List<string>();
 
-            set => TopAppsJson = System.Text.Json.JsonSerializer.Serialize(value);
+                try
+                {
+                    return JsonSerializer.Deserialize<List<string>>(TopAppsJson) ?? new List<string>();
+                }
+                catch (JsonException)
+                {
+                    return new List<string>();
+                }
+            }
+            set => TopAppsJson = JsonSerializer.Serialize(value ?? new List<string>());
         }
 
+        /// <summary>Recomputes the derived totals from the collected app usages.</summary>
         public void CalculateStatistics()
         {
-            if (!AppUsages.Any()) return;
+            if (AppUsages.Count == 0)
+                return;
 
-            ProductiveTime = TimeSpan.FromTicks(
-                AppUsages.Where(a => a.IsProductive).Sum(a => a.Duration.Ticks));
-
-            DistractedTime = TimeSpan.FromTicks(
-                AppUsages.Where(a => !a.IsProductive).Sum(a => a.Duration.Ticks));
-
+            ProductiveTime = TimeSpan.FromTicks(AppUsages.Where(a => a.IsProductive).Sum(a => a.Duration.Ticks));
+            DistractedTime = TimeSpan.FromTicks(AppUsages.Where(a => !a.IsProductive).Sum(a => a.Duration.Ticks));
             AppSwitches = AppUsages.Count;
 
-            var totalActiveTime = ProductiveTime + DistractedTime;
-            if (totalActiveTime.TotalMinutes > 0)
-            {
-                ProductivityScore = (ProductiveTime.TotalMinutes / totalActiveTime.TotalMinutes) * 100;
-            }
+            var activeTime = ProductiveTime + DistractedTime;
+            ProductivityScore = activeTime.TotalMinutes > 0
+                ? ProductiveTime.TotalMinutes / activeTime.TotalMinutes * 100
+                : 0;
 
             TopApps = AppUsages
                 .GroupBy(a => a.AppName)
@@ -74,15 +79,15 @@ namespace FocusAssistant.Models
         }
     }
 
-
+    /// <summary>Aggregated totals across a set of work sessions.</summary>
     public class SessionStatistics
     {
         public int TotalSessions { get; set; }
         public TimeSpan TotalWorkTime { get; set; }
         public TimeSpan TotalProductiveTime { get; set; }
+        public TimeSpan TotalDistractedTime { get; set; }
         public TimeSpan TotalBreakTime { get; set; }
         public TimeSpan AverageSessionLength { get; set; }
-        public TimeSpan TotalDistractedTime { get; set; }
         public double ProductivityScore { get; set; }
         public int TotalAppSwitches { get; set; }
     }

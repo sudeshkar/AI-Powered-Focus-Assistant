@@ -10,15 +10,15 @@ namespace FocusAssistant.Models.Response_Models
     public class ActivityResponse : BaseResponse
     {
         [JsonPropertyName("action_taken")]
-        public string ActionTaken { get; set; }
+        public string? ActionTaken { get; set; }
 
         [JsonPropertyName("distraction_risk")]
         public double DistractionRisk { get; set; }
 
         [JsonPropertyName("intervention_id")]
-        public string InterventionId { get; set; }
+        public string? InterventionId { get; set; }
 
         [JsonPropertyName("intervention_message")]
-        public string InterventionMessage { get; set; }
+        public string? InterventionMessage { get; set; }
     }
 }

@@ -1,16 +1,17 @@
-﻿using FocusAssistant.Services.Models.Events;
+using FocusAssistant.Services.Models.Events;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace FocusAssistant.Services.Application_Monitoring.Interfaces
 {
+    /// <summary>Watches which application currently has focus.</summary>
     public interface IWindowMonitor
     {
-        (string appName, string windowTitle) GetActiveWindow();
-        event EventHandler<AppWindowChangedEventArgs> WindowChanged;
+        /// <summary>The foreground app and window title, or (null, null) if unavailable.</summary>
+        (string? appName, string? windowTitle) GetActiveWindow();
+
+        /// <summary>Raised when focus moves to a different application.</summary>
+        event EventHandler<AppWindowChangedEventArgs>? WindowChanged;
+
         void StartMonitoring();
         void StopMonitoring();
         bool IsMonitoring { get; }

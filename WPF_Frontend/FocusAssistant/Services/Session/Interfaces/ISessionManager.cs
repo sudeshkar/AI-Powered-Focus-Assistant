@@ -1,23 +1,25 @@
-﻿using FocusAssistant.Models;
+using FocusAssistant.Models;
 using FocusAssistant.Models.Response_Models;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace FocusAssistant.Services.Session.Interfaces
 {
+    /// <summary>Starts, ends and reports on tracking sessions.</summary>
     public interface ISessionManager
     {
-        // Events
-        event EventHandler<UserSession> SessionStarted;
-        event EventHandler<UserSession> SessionEnded;
-        public event EventHandler<ActivityResponse>? AiInterventionReceived;
+        event EventHandler<UserSession>? SessionStarted;
+        event EventHandler<UserSession>? SessionEnded;
+
+        /// <summary>Raised when the backend returns an intervention worth showing.</summary>
+        event EventHandler<ActivityResponse>? AiInterventionReceived;
+
+        bool IsSessionActive { get; }
 
         Task StartSessionAsync();
         Task EndSessionAsync();
+
+        /// <summary>Aggregates across today's sessions, including the one in progress.</summary>
         SessionStatistics GetTodayStatistics();
-        void AddAppUsage(string appname,AppUsage currentAppUsage);
     }
 }

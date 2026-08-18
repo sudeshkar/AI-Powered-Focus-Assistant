@@ -1,6 +1,5 @@
-﻿using FocusAssistant.Models;
+using FocusAssistant.Models;
 using FocusAssistant.Models.Response_Models;
-using FocusAssistant.Services.Data_log_and_Save_Repo.Interfaces;
 using FocusAssistant.Services.Datafetch.Interfaces;
 using FocusAssistant.Services.Flask.Interfaces;
 using FocusAssistant.Services.Session.Interfaces;
@@ -8,142 +7,124 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Windows;
 
 namespace FocusAssistant.Services.Session
 {
+    /// <summary>
+    /// Produces the daily summary shown on the Tracking view, preferring the
+    /// backend's view of today and falling back to the local database.
+    /// </summary>
     public class DailyReportGenerator : IReportGenerator
     {
-        private readonly IBaseService<UserSession> _userSession;
-        private readonly IFlaskServerManager _flaskServerManager;
+        // The streak walk queries one day at a time, so it needs a hard stop.
+        private const int MaxStreakDays = 365;
+
+        private readonly IBaseService<UserSession> _userSessions;
         private readonly IAnalyticsService _analyticsService;
 
         public DailyReportGenerator(
-            IBaseService<UserSession> userSession,
-            IFlaskServerManager flaskServerManager,
+            IBaseService<UserSession> userSessions,
             IAnalyticsService analyticsService)
         {
-            _userSession = userSession;
-            _flaskServerManager = flaskServerManager;
-            _analyticsService = analyticsService;
+            _userSessions = userSessions ?? throw new ArgumentNullException(nameof(userSessions));
+            _analyticsService = analyticsService ?? throw new ArgumentNullException(nameof(analyticsService));
         }
 
-        // Fetch report from Flask API
+        /// <summary>
+        /// Today's report from the backend, falling back to locally stored sessions
+        /// when it is unreachable.
+        /// </summary>
         public async Task<AnalyticsResponse> GetReportFlask()
         {
             try
             {
-                return await _analyticsService.GetAnalyticsAsync();
+                var report = await _analyticsService.GetAnalyticsAsync();
+                if (report is not null)
+                    return report;
+
+                Console.WriteLine("Backend analytics unavailable; using local session history.");
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
-                    $"An error occurred: {ex.Message}",
-                    "Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
-
-                // If Flask fails, fallback to local report generation
-                return await GenerateReportInternal(DateTime.Now);
+                // A service must not raise UI. The previous version opened a
+                // MessageBox from here, which also threw when called off the UI thread.
+                Console.WriteLine($"Backend analytics failed: {ex.Message}. Using local session history.");
             }
+
+            return await GenerateReportInternal(DateTime.Today);
         }
 
-        // Generate a local report if Flask is not available
+        /// <summary>Builds a report from sessions stored in the local database.</summary>
         public async Task<AnalyticsResponse> GenerateReportInternal(DateTime date)
         {
             try
             {
-                if (_userSession is not IUserSessionService userSessionService)
-                {
-                    throw new InvalidOperationException("UserSession service does not support GetByDateAsync");
-                }
+                var sessions = await GetSessionsForDateAsync(date);
 
-                // Ensure sessions are generic IEnumerable<UserSession>
-                var sessionsRaw = await userSessionService.GetByDateAsync(date);
-                var sessions = sessionsRaw.Cast<UserSession>().ToList();
+                var productiveTicks = sessions.Sum(s => s.FocusTimeMinutes * TimeSpan.TicksPerMinute);
+                var totalTicks = sessions.Sum(s => Math.Max(0, (s.EndTime - s.StartTime).Ticks));
 
-
-                // Calculate productive and break time
-                var totalProductiveTicks = sessions.Sum(s => s.FocusTimeMinutes * TimeSpan.TicksPerMinute);
-                var totalBreakTicks = sessions.Sum(s =>
-                    (s.EndTime - s.StartTime).Ticks - (s.FocusTimeMinutes * TimeSpan.TicksPerMinute));
-                var totalTimeTicks = totalProductiveTicks + totalBreakTicks;
-
-                var productivityRate = totalTimeTicks > 0
-                    ? Math.Round((double)totalProductiveTicks / totalTimeTicks * 100, 2)
+                var productivityRate = totalTicks > 0
+                    ? Math.Round((double)productiveTicks / totalTicks * 100, 2)
                     : 0.0;
 
-                // Get top 5 most used apps
-                var topApps = sessions
-                    .SelectMany(s => s.MostUsedApps ?? new List<string>())
+                var appCounts = sessions
+                    .SelectMany(s => s.MostUsedApps)
                     .GroupBy(a => a)
                     .OrderByDescending(g => g.Count())
                     .Take(5)
-                    .Select(g => g.Key)
-                    .ToList();
+                    .ToDictionary(g => g.Key, g => g.Count());
 
-                // Build final analytics report
-                var report = new AnalyticsResponse
+                return new AnalyticsResponse
                 {
                     Date = date.ToString("yyyy-MM-dd"),
                     ProductivityRate = productivityRate,
                     RecentInterventions = sessions.Sum(s => s.DistractionEvents),
-                    TopApps = topApps,
-                    TotalActivities = sessions.SelectMany(s => s.MostUsedApps ?? new List<string>()).Count(),
+                    TopApps = appCounts,
+                    TotalActivities = sessions.Sum(s => s.MostUsedApps.Count),
+                    ProductivityStreaks = await CalculateStreakAsync(sessions, date),
                     Status = "success",
-                    Timestamp = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.ffffff")
+                    Timestamp = DateTime.Now.ToString("O"),
                 };
-
-                // Calculate productivity streaks
-                report.productivityStreaks = await CalculateStreak(sessions);
-
-                return report;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error generating report for {date:yyyy-MM-dd}: {ex.Message} at {DateTime.Now:HH:mm:ss.fff}");
+                Console.WriteLine($"Error generating local report for {date:yyyy-MM-dd}: {ex.Message}");
                 return new AnalyticsResponse
                 {
                     Date = date.ToString("yyyy-MM-dd"),
-                    ProductivityRate = 0,
-                    RecentInterventions = 0,
-                    TopApps = new List<string>(),
-                    TotalActivities = 0,
                     Status = "error",
-                    Timestamp = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.ffffff")
+                    Timestamp = DateTime.Now.ToString("O"),
                 };
             }
         }
 
-        // Calculate productivity streak
-        private async Task<int> CalculateStreak(IList<UserSession> sessions)
+        private Task<List<UserSession>> GetSessionsForDateAsync(DateTime date)
         {
-            if (sessions == null || !sessions.Any())
+            var start = date.Date;
+            var end = start.AddDays(1);
+
+            return _userSessions.QueryAsync(q => q.Where(s => s.StartTime >= start && s.StartTime < end));
+        }
+
+        /// <summary>Consecutive days ending at <paramref name="date"/> with productive time.</summary>
+        private async Task<int> CalculateStreakAsync(List<UserSession> todaysSessions, DateTime date)
+        {
+            if (!todaysSessions.Any(s => s.FocusTimeMinutes > 0))
                 return 0;
 
-            // Check if today has productive sessions
-            bool isTodayProductive = sessions.Any(s => s.FocusTimeMinutes > 0);
-            if (!isTodayProductive)
-                return 0;
+            var streak = 1;
+            var day = date.Date.AddDays(-1);
 
-            int streak = 1;
-            var previousDay = sessions.First().StartTime.Date.AddDays(-1);
-
-            if (_userSession is not IUserSessionService userSessionService)
+            // Bounded: the original loop was `while (true)` with a query per
+            // iteration and no exit other than a gap in the data.
+            for (var i = 0; i < MaxStreakDays; i++, day = day.AddDays(-1))
             {
-                throw new InvalidOperationException("UserSession service does not support GetByDateAsync");
-            }
-
-            while (true)
-            {
-                var prevSessionsRaw = await userSessionService.GetByDateAsync(previousDay);
-                var prevSessions = prevSessionsRaw.Cast<UserSession>().ToList();
-
-                if (!prevSessions.Any(s => s.FocusTimeMinutes > 0))
+                var sessions = await GetSessionsForDateAsync(day);
+                if (!sessions.Any(s => s.FocusTimeMinutes > 0))
                     break;
 
                 streak++;
-                previousDay = previousDay.AddDays(-1);
             }
 
             return streak;

@@ -8,37 +8,37 @@ namespace FocusAssistant.Models.Response_Models
     public class InsightsResponse : BaseResponse
     {
         [JsonPropertyName("insights")]
-        public Insights Insights { get; set; }
+        public Insights? Insights { get; set; }
     }
 
     public class Insights
     {
         [JsonPropertyName("action_effectiveness")]
-        public Dictionary<string, ActionMetrics> ActionEffectiveness { get; set; }
+        public Dictionary<string, ActionMetrics>? ActionEffectiveness { get; set; }
 
         [JsonPropertyName("adaptive_performance")]
-        public AdaptivePerformance AdaptivePerformance { get; set; }
+        public AdaptivePerformance? AdaptivePerformance { get; set; }
 
         [JsonPropertyName("behavioral_patterns")]
-        public BehavioralPatterns BehavioralPatterns { get; set; }
+        public BehavioralPatterns? BehavioralPatterns { get; set; }
 
         [JsonPropertyName("circadian_insights")]
-        public CircadianInsights CircadianInsights { get; set; }
+        public CircadianInsights? CircadianInsights { get; set; }
 
         [JsonPropertyName("learning_metrics")]
-        public LearningMetrics LearningMetrics { get; set; }
+        public LearningMetrics? LearningMetrics { get; set; }
 
         [JsonPropertyName("personalization_profile")]
-        public PersonalizationProfile PersonalizationProfile { get; set; }
+        public PersonalizationProfile? PersonalizationProfile { get; set; }
 
         [JsonPropertyName("prediction_accuracy")]
-        public PredictionAccuracy PredictionAccuracy { get; set; }
+        public PredictionAccuracy? PredictionAccuracy { get; set; }
 
         [JsonPropertyName("state_space_coverage")]
-        public StateSpaceCoverage StateSpaceCoverage { get; set; }
+        public StateSpaceCoverage? StateSpaceCoverage { get; set; }
 
         [JsonPropertyName("user_engagement_trends")]
-        public UserEngagementTrends UserEngagementTrends { get; set; }
+        public UserEngagementTrends? UserEngagementTrends { get; set; }
     }
 
     public class ActionMetrics
@@ -59,10 +59,10 @@ namespace FocusAssistant.Models.Response_Models
         public double AveragePerformance { get; set; }
 
         [JsonPropertyName("current_thresholds")]
-        public CurrentThresholds CurrentThresholds { get; set; }
+        public CurrentThresholds? CurrentThresholds { get; set; }
 
         [JsonPropertyName("performance_trend")]
-        public string PerformanceTrend { get; set; }
+        public string? PerformanceTrend { get; set; }
     }
 
     public class CurrentThresholds
@@ -86,10 +86,10 @@ namespace FocusAssistant.Models.Response_Models
         public int DailyPatternsCount { get; set; }
 
         [JsonPropertyName("most_active_hours")]
-        public List<List<object>> MostActiveHours { get; set; }
+        public List<List<object>>? MostActiveHours { get; set; }
 
         [JsonPropertyName("productivity_trends")]
-        public ProductivityTrends ProductivityTrends { get; set; }
+        public ProductivityTrends? ProductivityTrends { get; set; }
 
         [JsonPropertyName("weekly_patterns_count")]
         public int WeeklyPatternsCount { get; set; }
@@ -98,16 +98,16 @@ namespace FocusAssistant.Models.Response_Models
     public class ProductivityTrends
     {
         [JsonPropertyName("trend")]
-        public string Trend { get; set; }
+        public string? Trend { get; set; }
     }
 
     public class CircadianInsights
     {
         [JsonPropertyName("energy_patterns_phases")]
-        public List<string> EnergyPatternsPhases { get; set; }
+        public List<string>? EnergyPatternsPhases { get; set; }
 
         [JsonPropertyName("optimal_times")]
-        public Dictionary<string, double> OptimalTimes { get; set; }
+        public Dictionary<string, double>? OptimalTimes { get; set; }
 
         [JsonPropertyName("total_data_points")]
         public int TotalDataPoints { get; set; }
@@ -122,7 +122,7 @@ namespace FocusAssistant.Models.Response_Models
         public double LearningRate { get; set; }
 
         [JsonPropertyName("q_value_statistics")]
-        public QValueStatistics QValueStatistics { get; set; }
+        public QValueStatistics? QValueStatistics { get; set; }
 
         [JsonPropertyName("recent_performance")]
         public double RecentPerformance { get; set; }
@@ -155,7 +155,7 @@ namespace FocusAssistant.Models.Response_Models
         public double FeedbackReliability { get; set; }
 
         [JsonPropertyName("preferences")]
-        public Preferences Preferences { get; set; }
+        public Preferences? Preferences { get; set; }
 
         [JsonPropertyName("response_patterns_count")]
         public int ResponsePatternsCount { get; set; }
@@ -164,13 +164,13 @@ namespace FocusAssistant.Models.Response_Models
     public class Preferences
     {
         [JsonPropertyName("communication_style")]
-        public string CommunicationStyle { get; set; }
+        public string? CommunicationStyle { get; set; }
 
         [JsonPropertyName("gamification_preference")]
         public bool GamificationPreference { get; set; }
 
         [JsonPropertyName("motivation_type")]
-        public string MotivationType { get; set; }
+        public string? MotivationType { get; set; }
 
         [JsonPropertyName("statistics_interest")]
         public bool StatisticsInterest { get; set; }
@@ -206,7 +206,7 @@ namespace FocusAssistant.Models.Response_Models
         public double AverageEngagement { get; set; }
 
         [JsonPropertyName("trend")]
-        public string Trend { get; set; }
+        public string? Trend { get; set; }
 
         [JsonPropertyName("trend_strength")]
         public double TrendStrength { get; set; }
@@ -215,7 +215,7 @@ namespace FocusAssistant.Models.Response_Models
     public class SuggestionsResponse : BaseResponse
     {
         [JsonPropertyName("suggestions")]
-        public Suggestions Suggestions { get; set; }
+        public Suggestions? Suggestions { get; set; }
     }
 
     public class Suggestions
@@ -224,10 +224,10 @@ namespace FocusAssistant.Models.Response_Models
         public int DailyPatternsCount { get; set; }
 
         [JsonPropertyName("most_active_hours")]
-        public List<List<object>> MostActiveHours { get; set; }
+        public List<List<object>>? MostActiveHours { get; set; }
 
         [JsonPropertyName("productivity_trends")]
-        public ProductivityTrends ProductivityTrends { get; set; }
+        public ProductivityTrends? ProductivityTrends { get; set; }
 
         [JsonPropertyName("weekly_patterns_count")]
         public int WeeklyPatternsCount { get; set; }
@@ -236,15 +236,15 @@ namespace FocusAssistant.Models.Response_Models
     public class ActionResponse : BaseResponse
     {
         [JsonPropertyName("action_taken")]
-        public string ActionTaken { get; set; }
+        public string? ActionTaken { get; set; }
 
         [JsonPropertyName("distraction_risk")]
         public double DistractionRisk { get; set; }
 
         [JsonPropertyName("intervention_id")]
-        public string InterventionId { get; set; }
+        public string? InterventionId { get; set; }
 
         [JsonPropertyName("intervention_message")]
-        public string InterventionMessage { get; set; }
+        public string? InterventionMessage { get; set; }
     }
 }

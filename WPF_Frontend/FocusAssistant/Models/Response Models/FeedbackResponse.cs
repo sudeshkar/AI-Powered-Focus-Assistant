@@ -10,6 +10,6 @@ namespace FocusAssistant.Models.Response_Models
     public class FeedbackResponse : BaseResponse
     {
         [JsonPropertyName("message")]
-        public string Message { get; set; }
+        public string? Message { get; set; }
     }
 }

@@ -10,9 +10,9 @@ namespace FocusAssistant.Models.Response_Models
     public class BaseResponse
     {
         [JsonPropertyName("status")]
-        public string Status { get; set; }
+        public string? Status { get; set; }
 
         [JsonPropertyName("timestamp")]
-        public string Timestamp { get; set; }
+        public string? Timestamp { get; set; }
     }
 }
