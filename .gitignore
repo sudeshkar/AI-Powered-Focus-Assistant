@@ -1,0 +1,46 @@
+# ---- Secrets / local configuration ----
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# ---- Visual Studio / Rider ----
+.vs/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# ---- .NET build output ----
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+*.dll
+*.exe
+*.pdb
+*.cache
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+
+# ---- Local application data ----
+*.db
+*.db-shm
+*.db-wal
+*.log
+Data/
+Logs/
+
+# ---- OS ----
+Thumbs.db
+desktop.ini
+.DS_Store
