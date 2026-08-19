@@ -149,12 +149,8 @@ namespace FocusAssistant.Hosting
             services.AddSingleton<MainWindow>();
             services.AddSingleton<TrackingViewModel>();
             services.AddSingleton<TrackingView>();
-            services.AddTransient<AnalyticsViewModel>();
-            services.AddTransient<AnalyticsView>();
-            services.AddSingleton<RecommendationViewModel>();
-            services.AddSingleton<RecommendationsView>();
-            services.AddTransient<DashboardViewModel>();
-            services.AddTransient<DashboardView>();
+            services.AddTransient<InsightsViewModel>();
+            services.AddTransient<InsightsView>();
             services.AddTransient<TodayViewModel>();
             services.AddTransient<TodayView>();
             services.AddTransient<SettingsViewModel>();

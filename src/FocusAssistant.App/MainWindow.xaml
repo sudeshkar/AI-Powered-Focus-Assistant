@@ -53,15 +53,9 @@
                     </ui:NavigationViewItem.Icon>
                 </ui:NavigationViewItem>
 
-                <ui:NavigationViewItem Content="Analytics" TargetPageType="{x:Type views:AnalyticsView}">
+                <ui:NavigationViewItem Content="Insights" TargetPageType="{x:Type views:InsightsView}">
                     <ui:NavigationViewItem.Icon>
                         <ui:SymbolIcon Symbol="DataTrending24"/>
-                    </ui:NavigationViewItem.Icon>
-                </ui:NavigationViewItem>
-
-                <ui:NavigationViewItem Content="Recommendations" TargetPageType="{x:Type views:RecommendationsView}">
-                    <ui:NavigationViewItem.Icon>
-                        <ui:SymbolIcon Symbol="Lightbulb24"/>
                     </ui:NavigationViewItem.Icon>
                 </ui:NavigationViewItem>
             </ui:NavigationView.MenuItems>

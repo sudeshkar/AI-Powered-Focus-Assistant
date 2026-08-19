@@ -48,7 +48,35 @@ namespace FocusAssistant.Intelligence.Prompting
             foreach (var marker in (string[])["<|end|>", "<|assistant|>", "<|user|>", "<|system|>", "<|endoftext|>"])
                 text = text.Replace(marker, string.Empty);
 
-            return TrimToLastSentence(text.Trim());
+            return TrimToLastSentence(CollapseStutters(text.Trim()));
+        }
+
+        /// <summary>
+        /// Repairs a small-model tic seen consistently on this checkpoint: asked to copy a
+        /// figure verbatim from the prompt, it echoes it and then stutters part of it a
+        /// second time - "9m" becomes "9mm", "11 AM" becomes "11amam", "0 minutes" becomes
+        /// "0 minutes minutes". The figure itself is always still correct; only the repeated
+        /// tail is garbage.
+        /// </summary>
+        /// <remarks>
+        /// Two passes rather than one, because the stutter shows up at both granularities
+        /// and a single pattern cannot catch both: <see cref="DoubledSuffix"/> catches it
+        /// fused onto a short abbreviation ("9mm", "11amam"), and <see cref="RepeatedWord"/>
+        /// catches it as a whole word echoed twice in a row ("minutes minutes"). Chasing each
+        /// new surface form as it appears would never catch up with a model this small;
+        /// collapsing repeats generically here is what actually holds up.
+        /// </remarks>
+        private static readonly System.Text.RegularExpressions.Regex DoubledSuffix =
+            new(@"\b(\d+)\s?(am|pm|h|m)\2+\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        private static readonly System.Text.RegularExpressions.Regex RepeatedWord =
+            new(@"\b(\w+)(\s+\1\b)+", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        private static string CollapseStutters(string text)
+        {
+            text = DoubledSuffix.Replace(text, "$1$2");
+            text = RepeatedWord.Replace(text, "$1");
+            return text;
         }
 
         /// <summary>
