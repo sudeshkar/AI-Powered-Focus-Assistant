@@ -1,4 +1,5 @@
 using FocusAssistant.Core.Config;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -17,8 +18,12 @@ namespace FocusAssistant.Core.Config
         public Dictionary<string, string[]> DistractingApps { get; private set; }
         public string[] WorkKeywords { get; private set; }
 
-        public AppCategorizationConfig()
+        private readonly ILogger<AppCategorizationConfig> _logger;
+
+        public AppCategorizationConfig(ILogger<AppCategorizationConfig> logger)
         {
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
             // Defaults first, so a bad override can never leave these null.
             ProductiveApps = DefaultProductiveApps();
             DistractingApps = DefaultDistractingApps();
@@ -52,7 +57,7 @@ namespace FocusAssistant.Core.Config
             catch (Exception ex)
             {
                 // Keep the defaults rather than starting up with no rules at all.
-                Console.WriteLine($"Ignoring unreadable {configPath}: {ex.Message}");
+                _logger.LogWarning(ex, "Ignoring unreadable {Path}", configPath);
             }
         }
 

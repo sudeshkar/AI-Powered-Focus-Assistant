@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using FocusAssistant.Hosting;
 using FocusAssistant.Core.Reports;
 using System;
 using System.Collections.Generic;
@@ -12,6 +13,7 @@ namespace FocusAssistant.ViewModels
     public partial class DashboardViewModel : ObservableObject
     {
         private readonly IReportGenerator _reportGenerator;
+        private readonly StartupState _startupState;
 
         [ObservableProperty]
         private string productivityRate = "0%";
@@ -26,13 +28,20 @@ namespace FocusAssistant.ViewModels
 
         public int TopAppsCount => TopApps.Count;
 
-        public DashboardViewModel(IReportGenerator reportGenerator)
+        public DashboardViewModel(IReportGenerator reportGenerator, StartupState startupState)
         {
             _reportGenerator = reportGenerator ?? throw new ArgumentNullException(nameof(reportGenerator));
+            _startupState = startupState ?? throw new ArgumentNullException(nameof(startupState));
         }
 
         public async Task LoadAsync()
         {
+            // Migrations run on a background thread so the window can paint at once, so
+            // every read has to wait for the schema to exist. Without this the first run
+            // logs "no such table" and silently shows an empty screen.
+            if (!await _startupState.DatabaseReady)
+                return;
+
             var report = await _reportGenerator.GetTodayReportAsync();
 
             ProductivityRate = $"{report.ProductivityRate:F0}%";

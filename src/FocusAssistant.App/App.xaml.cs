@@ -1,101 +1,59 @@
-using FocusAssistant.Core.Config;
-using FocusAssistant.Core.Data.Abstractions;
-using FocusAssistant.Core.Focus;
-using FocusAssistant.Core.Monitoring;
-using FocusAssistant.Core.Reports;
-using FocusAssistant.Core.Session;
-using FocusAssistant.Data.EF;
-using FocusAssistant.Data.Queries;
-using FocusAssistant.Platform.Monitoring;
-using FocusAssistant.ViewModels;
-using FocusAssistant.Views;
-using Microsoft.EntityFrameworkCore;
+using FocusAssistant.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using System;
-using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace FocusAssistant
 {
     /// <summary>
-    /// Composition root. Owns the service provider and creates the database.
+    /// WPF entry point. Owns the host and gets a window on screen as fast as possible.
     /// </summary>
     /// <remarks>
-    /// This used to also launch, health-check, and tear down a Python Flask
-    /// process, so the app could not run without a Python install and a matching
-    /// virtual environment. The whole subprocess-management problem is gone: the
-    /// focus engine and the intervention pipeline it feeds (Phase 4) run in this
-    /// process.
+    /// <para>
+    /// This used to launch, health-check, and tear down a Python Flask process, so the
+    /// app could not run without a Python install and a matching virtual environment.
+    /// That is gone: the focus engine and everything it feeds run in this process.
+    /// </para>
+    /// <para>
+    /// <b>Startup is deliberately non-blocking.</b> <see cref="OnStartup"/> has to be
+    /// synchronous — WPF gives no choice — so it does only work that cannot fail slowly:
+    /// build the object graph, show the window, and hand off. Migrations, model loading,
+    /// and tracking are hosted services started afterwards on a background thread, and
+    /// the shell binds to <see cref="StartupState"/> to show what is still warming up.
+    /// The previous version ran EnsureCreated() before Show(), so a slow disk was a
+    /// blank screen with no explanation.
+    /// </para>
     /// </remarks>
     public partial class App : Application
     {
-        private ServiceProvider? _serviceProvider;
-
-        private static string DatabasePath => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "FocusAssistant",
-            "focusassistant.db");
-
-        private void ConfigureServices(IServiceCollection services)
-        {
-            // ---- Database ----
-            // A factory rather than a scoped DbContext: the consumers below are
-            // singletons driven by polling timers, and a shared context would be
-            // used concurrently from several threads.
-            Directory.CreateDirectory(Path.GetDirectoryName(DatabasePath)!);
-            services.AddDbContextFactory<FocusAssistantDbContext>(options =>
-                options.UseSqlite($"Data Source={DatabasePath}"));
-
-            services.AddSingleton(typeof(IBaseService<>), typeof(BaseService<>));
-            services.AddSingleton<AnalyticsServiceSQL>();
-
-            // ---- Configuration ----
-            services.AddSingleton<IAppCategorizationConfig, AppCategorizationConfig>();
-
-            // ---- Monitoring and sessions ----
-            services.AddSingleton<IProductivityStrategy, RuleBasedProductivityStrategy>();
-            services.AddSingleton<IWindowMonitor>(_ => new WindowsApiWindowMonitor(TimeSpan.FromSeconds(2)));
-            services.AddSingleton<IIdleMonitor>(_ => new WindowsApiIdleMonitor(TimeSpan.FromMinutes(2)));
-            services.AddSingleton<ISessionEngine, SessionEngine>();
-            services.AddSingleton<WindowTracker>();
-            services.AddSingleton<IReportGenerator, DailyReportGenerator>();
-
-            // ---- Views and view models ----
-            services.AddSingleton<MainWindow>();
-            services.AddSingleton<TrackingViewModel>();
-            services.AddSingleton<TrackingView>();
-            services.AddTransient<AnalyticsViewModel>();
-            services.AddTransient<AnalyticsView>();
-            services.AddSingleton<RecommendationViewModel>();
-            services.AddSingleton<RecommendationsView>();
-            services.AddTransient<DashboardViewModel>();
-            services.AddTransient<DashboardView>();
-        }
+        private IHost? _host;
 
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
 
+            RegisterGlobalExceptionHandlers();
+
             try
             {
-                var services = new ServiceCollection();
-                ConfigureServices(services);
+                _host = AppHost.Build();
 
-                // Validate on build so lifetime mistakes surface here rather than as
-                // a confusing failure deep in a view.
-                _serviceProvider = services.BuildServiceProvider(new ServiceProviderOptions
-                {
-                    ValidateOnBuild = true,
-                    ValidateScopes = true,
-                });
-
-                InitializeDatabase();
-
-                MainWindow = _serviceProvider.GetRequiredService<MainWindow>();
+                MainWindow = _host.Services.GetRequiredService<MainWindow>();
                 MainWindow.Show();
+
+                // Not awaited on purpose: OnStartup must return so the window can paint.
+                // StartHostAsync owns every failure from here on.
+                _ = StartHostAsync();
             }
             catch (Exception ex)
             {
+                // Only graph construction can land here, and a graph that will not build
+                // is not something the app can run without.
                 MessageBox.Show(
                     $"Focus Assistant could not start.\n\n{ex.Message}",
                     "Startup failed", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -103,23 +61,80 @@ namespace FocusAssistant
             }
         }
 
-        private void InitializeDatabase()
+        private async Task StartHostAsync()
         {
-            var factory = _serviceProvider!.GetRequiredService<IDbContextFactory<FocusAssistantDbContext>>();
-            using var context = factory.CreateDbContext();
-            context.Database.EnsureCreated();
-            Console.WriteLine($"Database ready at {DatabasePath}");
+            try
+            {
+                await _host!.StartAsync();
+            }
+            catch (Exception ex)
+            {
+                // A hosted service that failed leaves the app degraded, not dead — the
+                // window is already up and the user should be told which part is missing.
+                _host!.Services.GetRequiredService<ILogger<App>>()
+                    .LogError(ex, "Host failed to start");
+                _host.Services.GetRequiredService<StartupState>().FailureMessage =
+                    $"Some background services could not start: {ex.Message}";
+            }
+        }
+
+        /// <summary>
+        /// Catches what the per-timer try/catch blocks cannot: anything thrown on the
+        /// dispatcher or an unobserved task. Without these, a throw on a threadpool
+        /// thread ends the process with no dialog and nothing in the log.
+        /// </summary>
+        private void RegisterGlobalExceptionHandlers()
+        {
+            DispatcherUnhandledException += (_, args) =>
+            {
+                TryLog(args.Exception, "Unhandled dispatcher exception");
+                MessageBox.Show(
+                    $"Something went wrong.\n\n{args.Exception.Message}",
+                    "Focus Assistant", MessageBoxButton.OK, MessageBoxImage.Warning);
+
+                // Handled: a failure while rendering one view is not a reason to lose the
+                // tracking session running behind it.
+                args.Handled = true;
+            };
+
+            TaskScheduler.UnobservedTaskException += (_, args) =>
+            {
+                TryLog(args.Exception, "Unobserved task exception");
+                args.SetObserved();
+            };
+
+            AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+                TryLog(args.ExceptionObject as Exception, "Fatal unhandled exception");
+        }
+
+        private void TryLog(Exception? ex, string message)
+        {
+            try
+            {
+                _host?.Services.GetService<ILogger<App>>()?.LogError(ex, "{Message}", message);
+            }
+            catch
+            {
+                // Logging must never be the thing that takes the process down.
+            }
         }
 
         protected override void OnExit(ExitEventArgs e)
         {
             try
             {
-                _serviceProvider?.Dispose();
+                if (_host is not null)
+                {
+                    // Bounded: a hosted service that hangs on shutdown must not leave a
+                    // zombie process holding the SQLite file.
+                    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    _host.StopAsync(timeout.Token).GetAwaiter().GetResult();
+                    _host.Dispose();
+                }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error during shutdown: {ex.Message}");
+                TryLog(ex, "Error during shutdown");
             }
 
             base.OnExit(e);

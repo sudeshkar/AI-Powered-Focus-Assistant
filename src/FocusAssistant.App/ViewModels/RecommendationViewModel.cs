@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using FocusAssistant.Hosting;
 using CommunityToolkit.Mvvm.Input;
 using FocusAssistant.Core.Reports;
 using System;
@@ -15,6 +16,7 @@ namespace FocusAssistant.ViewModels
     public partial class RecommendationViewModel : ObservableObject
     {
         private readonly IReportGenerator _reportGenerator;
+        private readonly StartupState _startupState;
 
         [ObservableProperty]
         private string headline = "No data yet - start a session to see insights here.";
@@ -28,19 +30,24 @@ namespace FocusAssistant.ViewModels
             "been recorded. This card will summarise what helped and what broke your " +
             "focus once that lands.";
 
-        public RecommendationViewModel(IReportGenerator reportGenerator)
+        public RecommendationViewModel(IReportGenerator reportGenerator, StartupState startupState)
         {
             _reportGenerator = reportGenerator ?? throw new ArgumentNullException(nameof(reportGenerator));
-            _ = LoadAsync();
+            _startupState = startupState ?? throw new ArgumentNullException(nameof(startupState));
+
+            // Not started here: see AnalyticsViewModel. The view calls LoadAsync on Loaded.
         }
 
         [RelayCommand]
         private Task RefreshAsync() => LoadAsync();
 
-        private async Task LoadAsync()
+        public async Task LoadAsync()
         {
             try
             {
+                if (!await _startupState.DatabaseReady)
+                    return;
+
                 var report = await _reportGenerator.GetTodayReportAsync();
 
                 Headline = report.TotalActivities == 0

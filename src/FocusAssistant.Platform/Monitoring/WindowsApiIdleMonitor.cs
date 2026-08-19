@@ -1,4 +1,5 @@
 using FocusAssistant.Core.Monitoring;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -36,8 +37,14 @@ namespace FocusAssistant.Platform.Monitoring
         private bool _wasIdle;
         private bool _isMonitoring;
 
-        public WindowsApiIdleMonitor(TimeSpan? idleThreshold = null, TimeSpan? pollInterval = null)
+        private readonly ILogger<WindowsApiIdleMonitor> _logger;
+
+        public WindowsApiIdleMonitor(
+            ILogger<WindowsApiIdleMonitor> logger,
+            TimeSpan? idleThreshold = null,
+            TimeSpan? pollInterval = null)
         {
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _idleThreshold = idleThreshold ?? TimeSpan.FromMinutes(2);
             _pollInterval = pollInterval ?? TimeSpan.FromSeconds(5);
         }
@@ -74,7 +81,7 @@ namespace FocusAssistant.Platform.Monitoring
                 _isMonitoring = true;
                 _wasIdle = IsIdle;
                 _monitoringTimer = new Timer(CheckIdleState, null, _pollInterval, _pollInterval);
-                Console.WriteLine($"Idle monitor started (threshold {_idleThreshold.TotalMinutes:0.#} min).");
+                _logger.LogInformation("Idle monitor started (threshold {Minutes:0.#} min)", _idleThreshold.TotalMinutes);
             }
         }
 
@@ -88,7 +95,7 @@ namespace FocusAssistant.Platform.Monitoring
                 _isMonitoring = false;
                 _monitoringTimer?.Dispose();
                 _monitoringTimer = null;
-                Console.WriteLine("Idle monitor stopped.");
+                _logger.LogInformation("Idle monitor stopped");
             }
         }
 
@@ -113,7 +120,7 @@ namespace FocusAssistant.Platform.Monitoring
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error checking idle state: {ex.Message}");
+                _logger.LogWarning(ex, "Error checking idle state");
             }
         }
 

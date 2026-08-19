@@ -27,7 +27,7 @@ namespace FocusAssistant.Views
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Could not load dashboard data: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Could not load dashboard data: {ex.Message}");
             }
         }
     }

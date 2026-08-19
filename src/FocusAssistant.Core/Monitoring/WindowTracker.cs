@@ -1,4 +1,5 @@
 using FocusAssistant.Core.Session;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -27,14 +28,18 @@ namespace FocusAssistant.Core.Monitoring
 
         public bool IsTracking => _isTracking;
 
+        private readonly ILogger<WindowTracker> _logger;
+
         public WindowTracker(
             IWindowMonitor windowMonitor,
             IIdleMonitor idleMonitor,
-            ISessionEngine sessionEngine)
+            ISessionEngine sessionEngine,
+            ILogger<WindowTracker> logger)
         {
             _windowMonitor = windowMonitor ?? throw new ArgumentNullException(nameof(windowMonitor));
             _idleMonitor = idleMonitor ?? throw new ArgumentNullException(nameof(idleMonitor));
             _sessionEngine = sessionEngine ?? throw new ArgumentNullException(nameof(sessionEngine));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         public async Task StartTrackingAsync(string? goal = null)
@@ -53,11 +58,11 @@ namespace FocusAssistant.Core.Monitoring
                 _idleMonitor.StartMonitoring();
                 _isTracking = true;
 
-                Console.WriteLine("Tracking started.");
+                _logger.LogInformation("Tracking started");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to start tracking: {ex.Message}");
+                _logger.LogError(ex, "Failed to start tracking");
                 await SafeStopAsync();
                 throw;
             }
@@ -82,7 +87,7 @@ namespace FocusAssistant.Core.Monitoring
                 _isTracking = false;
 
                 await _sessionEngine.EndSessionAsync();
-                Console.WriteLine("Tracking stopped.");
+                _logger.LogInformation("Tracking stopped");
             }
             finally
             {
@@ -102,7 +107,7 @@ namespace FocusAssistant.Core.Monitoring
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Cleanup after failed start also failed: {ex.Message}");
+                _logger.LogError(ex, "Cleanup after failed start also failed");
             }
         }
     }

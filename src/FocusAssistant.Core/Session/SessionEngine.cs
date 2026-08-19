@@ -1,4 +1,5 @@
 using FocusAssistant.Core.Data.Abstractions;
+using Microsoft.Extensions.Logging;
 using FocusAssistant.Core.Focus;
 using FocusAssistant.Core.Models;
 using FocusAssistant.Core.Monitoring;
@@ -33,6 +34,7 @@ namespace FocusAssistant.Core.Session
         private readonly IWindowMonitor _windowMonitor;
         private readonly IIdleMonitor _idleMonitor;
         private readonly IProductivityStrategy _productivityStrategy;
+        private readonly ILogger<SessionEngine> _logger;
 
         private readonly object _sessionLock = new();
 
@@ -64,7 +66,8 @@ namespace FocusAssistant.Core.Session
             IBaseService<AppUsage> appUsages,
             IWindowMonitor windowMonitor,
             IIdleMonitor idleMonitor,
-            IProductivityStrategy productivityStrategy)
+            IProductivityStrategy productivityStrategy,
+            ILogger<SessionEngine> logger)
         {
             _userSessions = userSessions ?? throw new ArgumentNullException(nameof(userSessions));
             _workSessions = workSessions ?? throw new ArgumentNullException(nameof(workSessions));
@@ -72,6 +75,7 @@ namespace FocusAssistant.Core.Session
             _windowMonitor = windowMonitor ?? throw new ArgumentNullException(nameof(windowMonitor));
             _idleMonitor = idleMonitor ?? throw new ArgumentNullException(nameof(idleMonitor));
             _productivityStrategy = productivityStrategy ?? throw new ArgumentNullException(nameof(productivityStrategy));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
             _windowMonitor.WindowChanged += OnWindowChanged;
             _idleMonitor.IdleStateChanged += OnIdleStateChanged;
@@ -81,7 +85,7 @@ namespace FocusAssistant.Core.Session
         {
             if (IsSessionActive)
             {
-                Console.WriteLine("Session already active; ending it before starting a new one.");
+                _logger.LogInformation("Session already active; ending it before starting a new one");
                 await EndSessionAsync();
             }
 
@@ -117,8 +121,8 @@ namespace FocusAssistant.Core.Session
             if (!string.IsNullOrEmpty(appName))
                 BeginAppUsage(appName, windowTitle, DateTime.Now);
 
-            Console.WriteLine($"Session started: {userSession.SessionId}" +
-                (CurrentGoal is null ? "" : $" (goal: {CurrentGoal})"));
+            _logger.LogInformation("Session {SessionId} started (goal: {Goal})",
+                userSession.SessionId, CurrentGoal ?? "none");
             SessionStarted?.Invoke(this, userSession);
         }
 
@@ -161,11 +165,11 @@ namespace FocusAssistant.Core.Session
                 await _appUsages.CreateRangeAsync(pendingUsages);
                 await _workSessions.UpdateAsync(workSession);
                 await _userSessions.UpdateAsync(userSession);
-                Console.WriteLine($"Session saved: {pendingUsages.Count} app usages.");
+                _logger.LogInformation("Session saved with {Count} app usages", pendingUsages.Count);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to save session: {ex.Message} ({ex.InnerException?.Message})");
+                _logger.LogError(ex, "Failed to save session");
             }
 
             SessionEnded?.Invoke(this, userSession);
@@ -184,7 +188,7 @@ namespace FocusAssistant.Core.Session
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Could not load today's sessions: {ex.Message}");
+                _logger.LogWarning(ex, "Could not load today's sessions");
                 return new List<WorkSession>();
             }
         }
@@ -232,7 +236,7 @@ namespace FocusAssistant.Core.Session
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error handling window change: {ex.Message}");
+                _logger.LogWarning(ex, "Error handling window change");
             }
         }
 

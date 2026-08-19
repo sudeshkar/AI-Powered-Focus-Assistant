@@ -1,4 +1,5 @@
 using FocusAssistant.Core.Data.Abstractions;
+using Microsoft.Extensions.Logging;
 using FocusAssistant.Core.Models;
 using System;
 using System.Collections.Generic;
@@ -20,9 +21,14 @@ namespace FocusAssistant.Core.Reports
 
         private readonly IBaseService<UserSession> _userSessions;
 
-        public DailyReportGenerator(IBaseService<UserSession> userSessions)
+        private readonly ILogger<DailyReportGenerator> _logger;
+
+        public DailyReportGenerator(
+            IBaseService<UserSession> userSessions,
+            ILogger<DailyReportGenerator> logger)
         {
             _userSessions = userSessions ?? throw new ArgumentNullException(nameof(userSessions));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         public Task<DailyFocusReport> GetTodayReportAsync() => GenerateReportAsync(DateTime.Today);
@@ -60,7 +66,7 @@ namespace FocusAssistant.Core.Reports
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error generating report for {date:yyyy-MM-dd}: {ex.Message}");
+                _logger.LogWarning(ex, "Error generating report for {Date:yyyy-MM-dd}", date);
                 return new DailyFocusReport
                 {
                     Date = date.ToString("yyyy-MM-dd"),

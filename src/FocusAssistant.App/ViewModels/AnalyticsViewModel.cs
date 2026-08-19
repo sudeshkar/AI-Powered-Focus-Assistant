@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using FocusAssistant.Hosting;
 using CommunityToolkit.Mvvm.Input;
 using FocusAssistant.Core.Models;
 using FocusAssistant.Data.Queries;
@@ -16,20 +17,26 @@ namespace FocusAssistant.ViewModels
     public class AnalyticsViewModel : ObservableObject
     {
         private readonly AnalyticsServiceSQL _analytics;
+        private readonly StartupState _startupState;
 
         private SessionStatistics _statistics = new();
         private List<AppUsageSummary> _topApps = new();
         private DateTime _selectedDate = DateTime.Today;
         private string _status = string.Empty;
 
-        public AnalyticsViewModel(AnalyticsServiceSQL analytics)
+        public AnalyticsViewModel(AnalyticsServiceSQL analytics, StartupState startupState)
         {
             _analytics = analytics ?? throw new ArgumentNullException(nameof(analytics));
+            _startupState = startupState ?? throw new ArgumentNullException(nameof(startupState));
 
             LoadDataCommand = new AsyncRelayCommand(LoadDataAsync);
             DownloadReportCommand = new AsyncRelayCommand(DownloadReportAsync);
 
-            _ = LoadDataAsync();
+            // Deliberately not started here. Kicking off database I/O from a constructor
+            // makes resolving the view model a side-effecting operation, hides every
+            // exception it throws, and - because this view model is transient - re-ran
+            // the query on every single navigation. The view calls LoadDataAsync on
+            // Loaded instead.
         }
 
         public SessionStatistics Statistics { get => _statistics; set => SetProperty(ref _statistics, value); }
@@ -49,8 +56,12 @@ namespace FocusAssistant.ViewModels
         public ICommand LoadDataCommand { get; }
         public ICommand DownloadReportCommand { get; }
 
-        private async Task LoadDataAsync()
+        public async Task LoadDataAsync()
         {
+            // See the constructor: the schema may not exist yet on a first run.
+            if (!await _startupState.DatabaseReady)
+                return;
+
             try
             {
                 Statistics = await _analytics.GetDailyStatisticsAsync(SelectedDate);
@@ -64,7 +75,7 @@ namespace FocusAssistant.ViewModels
                 // Surfaced as inline status rather than a modal: this also runs from
                 // the constructor, where a dialog would block the view from loading.
                 Status = $"Could not load data: {ex.Message}";
-                Console.WriteLine($"Analytics load failed: {ex}");
+                System.Diagnostics.Debug.WriteLine($"Analytics load failed: {ex}");
             }
         }
 

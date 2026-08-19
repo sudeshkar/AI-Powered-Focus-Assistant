@@ -1,4 +1,5 @@
 using FocusAssistant.Core.Monitoring;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -41,8 +42,13 @@ namespace FocusAssistant.Platform.Monitoring
 
         public event EventHandler<AppWindowChangedEventArgs>? WindowChanged;
 
-        public WindowsApiWindowMonitor(TimeSpan? pollingInterval = null)
+        private readonly ILogger<WindowsApiWindowMonitor> _logger;
+
+        public WindowsApiWindowMonitor(
+            ILogger<WindowsApiWindowMonitor> logger,
+            TimeSpan? pollingInterval = null)
         {
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             PollingInterval = pollingInterval ?? TimeSpan.FromSeconds(1);
         }
 
@@ -73,7 +79,7 @@ namespace FocusAssistant.Platform.Monitoring
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error reading active window: {ex.Message}");
+                _logger.LogWarning(ex, "Error reading active window");
                 return (null, null);
             }
         }
@@ -91,7 +97,7 @@ namespace FocusAssistant.Platform.Monitoring
                 // Honour the configured interval. This used to hard-code one second,
                 // making PollingInterval decorative.
                 _monitoringTimer = new Timer(CheckWindowChange, null, PollingInterval, PollingInterval);
-                Console.WriteLine($"Window monitor started (every {PollingInterval.TotalSeconds:0.#}s).");
+                _logger.LogInformation("Window monitor started (every {Seconds:0.#}s)", PollingInterval.TotalSeconds);
             }
         }
 
@@ -105,7 +111,7 @@ namespace FocusAssistant.Platform.Monitoring
                 _isMonitoring = false;
                 _monitoringTimer?.Dispose();
                 _monitoringTimer = null;
-                Console.WriteLine("Window monitor stopped.");
+                _logger.LogInformation("Window monitor stopped");
             }
         }
 
@@ -150,7 +156,7 @@ namespace FocusAssistant.Platform.Monitoring
             catch (Exception ex)
             {
                 // A throw here would take down the timer thread.
-                Console.WriteLine($"Error in window change detection: {ex.Message}");
+                _logger.LogWarning(ex, "Error in window change detection");
             }
             finally
             {

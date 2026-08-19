@@ -32,11 +32,17 @@ artifacts/
 /Data/
 /Logs/
 
-# ---- Downloaded models (Phase 6) ----
-# The embedding model is small and committed; the local SLM is downloaded on
-# first use and never belongs in source control.
-/models/*.onnx
-/models/*.gguf
+# ---- Models ----
+# The MiniLM embedding model is small (~23MB) and IS committed - the classifier
+# is useless without it, so a fresh clone must build and run as-is. Everything
+# else under /models/ is ignored by default. Note the allowlist form: a bare
+# "/models/*.onnx" would not have matched a nested path, so committing the
+# model depended on an accident of glob semantics rather than intent.
+# The Phi-3.5 SLM is downloaded on first use into %LocalAppData%\FocusAssistant\Models
+# and never belongs in source control at all.
+/models/**
+!/models/minilm/
+!/models/minilm/*
 
 # ---- OS ----
 Thumbs.db

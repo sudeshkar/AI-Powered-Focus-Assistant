@@ -1,4 +1,5 @@
 using FocusAssistant.Core.Monitoring;
+using FocusAssistant.Hosting;
 using FocusAssistant.Views;
 using Microsoft.Extensions.DependencyInjection;
 using System;
@@ -13,11 +14,13 @@ namespace FocusAssistant
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly WindowTracker _windowTracker;
+        private readonly StartupState _startupState;
 
-        public MainWindow(IServiceProvider serviceProvider, WindowTracker windowTracker)
+        public MainWindow(IServiceProvider serviceProvider, WindowTracker windowTracker, StartupState startupState)
         {
             _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
             _windowTracker = windowTracker ?? throw new ArgumentNullException(nameof(windowTracker));
+            _startupState = startupState ?? throw new ArgumentNullException(nameof(startupState));
 
             InitializeComponent();
 
@@ -32,6 +35,13 @@ namespace FocusAssistant
         {
             try
             {
+                // Migrations run on a background thread so the window can paint immediately,
+                // which means the schema may not exist yet. Starting a session before it
+                // does fails on "no such table: UserSessions" - only invisibly, on a first
+                // run, where the app looks like it is working and records nothing.
+                if (!await _startupState.DatabaseReady)
+                    return;
+
                 if (!_windowTracker.IsTracking)
                     await _windowTracker.StartTrackingAsync();
             }
@@ -51,7 +61,7 @@ namespace FocusAssistant
             catch (Exception ex)
             {
                 // The window is already gone; log rather than raising more UI.
-                Console.WriteLine($"Error stopping tracking on close: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Error stopping tracking on close: {ex.Message}");
             }
         }
 
@@ -91,7 +101,7 @@ namespace FocusAssistant
 
         private static void ShowError(string action, Exception ex)
         {
-            Console.WriteLine($"Failed to {action}: {ex}");
+            System.Diagnostics.Debug.WriteLine($"Failed to {action}: {ex}");
             System.Windows.MessageBox.Show($"Could not {action}.\n\n{ex.Message}",
                 "Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
         }

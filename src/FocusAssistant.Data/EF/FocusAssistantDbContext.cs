@@ -66,6 +66,14 @@ namespace FocusAssistant.Data.EF
                 .Property(u => u.aID)
                 .ValueGeneratedOnAdd();
 
+            // Every analytics query filters on a start time or joins on wID, and
+            // without these SQLite scans the whole table - which grows by a row per
+            // application switch, all day, forever.
+            modelBuilder.Entity<AppUsage>().HasIndex(a => a.StartTime);
+            modelBuilder.Entity<AppUsage>().HasIndex(a => a.wID);
+            modelBuilder.Entity<WorkSession>().HasIndex(w => w.StartTime);
+            modelBuilder.Entity<UserSession>().HasIndex(u => u.StartTime);
+
             base.OnModelCreating(modelBuilder);
         }
     }
