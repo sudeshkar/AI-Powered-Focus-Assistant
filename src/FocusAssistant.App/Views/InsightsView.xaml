@@ -177,12 +177,36 @@
                 </Border>
             </Grid>
 
-            <!-- Export -->
+            <!-- Report -->
             <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
-                <ui:Button Content="Export today's report (CSV)" Command="{Binding DownloadReportCommand}"/>
-                <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Margin="12,0,0,0" Opacity="0.7" FontSize="12"/>
+                <ui:Button Content="Save this report" Command="{Binding DownloadReportCommand}"/>
             </StackPanel>
 
         </StackPanel>
+
+        <!-- A transient toast rather than a permanently-shown file path: it says whether the
+             save worked and then gets out of the way, instead of leaving a stale absolute
+             path sitting on the page as if it were part of the report itself. -->
+        <Border Panel.ZIndex="2" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                Margin="0,0,24,24" Padding="14,10" CornerRadius="8"
+                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                Visibility="{Binding IsStatusVisible, Converter={StaticResource BoolToVis}}">
+            <StackPanel Orientation="Horizontal">
+                <ui:SymbolIcon Symbol="CheckmarkCircle24" Foreground="#4CAF50" Margin="0,0,8,0" VerticalAlignment="Center">
+                    <ui:SymbolIcon.Style>
+                        <Style TargetType="ui:SymbolIcon">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsStatusError}" Value="True">
+                                    <Setter Property="Symbol" Value="ErrorCircle24"/>
+                                    <Setter Property="Foreground" Value="#C05B4A"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ui:SymbolIcon.Style>
+                </ui:SymbolIcon>
+                <TextBlock Text="{Binding Status}" VerticalAlignment="Center" FontSize="13"/>
+            </StackPanel>
+        </Border>
     </Grid>
 </Page>

@@ -1,5 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DocumentFormat.OpenXml;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
 using FocusAssistant.Core.Focus;
 using FocusAssistant.Core.Intelligence;
 using FocusAssistant.Core.Reports;
@@ -9,10 +12,11 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using System;
 using System.Collections.ObjectModel;
-using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using OpenXmlParagraph = DocumentFormat.OpenXml.Wordprocessing.Paragraph;
+using OpenXmlText = DocumentFormat.OpenXml.Wordprocessing.Text;
 
 namespace FocusAssistant.ViewModels
 {
@@ -38,7 +42,6 @@ namespace FocusAssistant.ViewModels
     public sealed partial class InsightsViewModel : ObservableObject
     {
         private readonly DayQueryService _days;
-        private readonly AnalyticsServiceSQL _analytics;
         private readonly ILocalLanguageModel _languageModel;
         private readonly StartupState _startupState;
         private readonly ILogger<InsightsViewModel> _logger;
@@ -59,6 +62,12 @@ namespace FocusAssistant.ViewModels
         [ObservableProperty] private bool _isWritingObservations;
 
         [ObservableProperty] private string _status = string.Empty;
+        [ObservableProperty] private bool _isStatusVisible;
+        [ObservableProperty] private bool _isStatusError;
+
+        // Cancel-and-recreate so a second save inside the four-second window restarts the
+        // clock instead of the first save's timer hiding the second save's message early.
+        private CancellationTokenSource? _statusCancellation;
 
         // Same reasoning as TodayViewModel's gate: only effective because this view model
         // is registered Singleton now, so a revisit is the same instance asking "have I
@@ -74,6 +83,7 @@ namespace FocusAssistant.ViewModels
         // semaphore - each one individually harmless, but stacked they make the whole app
         // feel stuck for the time it takes to work through the backlog.
         private CancellationTokenSource? _observationsCancellation;
+        private (DateTime From, DateTime To) _loadedRange;
 
         /// <summary>Average productive share per hour of the day, across the whole period.</summary>
         public ObservableCollection<HourlyFocus> HourlyPattern { get; } = [];
@@ -83,13 +93,11 @@ namespace FocusAssistant.ViewModels
 
         public InsightsViewModel(
             DayQueryService days,
-            AnalyticsServiceSQL analytics,
             ILocalLanguageModel languageModel,
             StartupState startupState,
             ILogger<InsightsViewModel> logger)
         {
             _days = days ?? throw new ArgumentNullException(nameof(days));
-            _analytics = analytics ?? throw new ArgumentNullException(nameof(analytics));
             _languageModel = languageModel ?? throw new ArgumentNullException(nameof(languageModel));
             _startupState = startupState ?? throw new ArgumentNullException(nameof(startupState));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -121,6 +129,7 @@ namespace FocusAssistant.ViewModels
             try
             {
                 var (from, to) = RangeFor(Period);
+                _loadedRange = (from, to);
                 var usages = await _days.GetUsagesAsync(from, to);
 
                 var score = FocusScorer.Score(usages, TimeSpan.Zero);
@@ -251,31 +260,139 @@ namespace FocusAssistant.ViewModels
             return string.Join("\n", lines);
         }
 
+        /// <summary>
+        /// Turns what is already on screen into a document worth keeping, rather than a raw
+        /// CSV row dump nobody re-opens. Reuses the figures already computed by
+        /// <see cref="LoadAsync"/> - no extra queries, and no extra model call, since
+        /// <see cref="Observations"/> already holds either the written or templated summary.
+        /// </summary>
         [RelayCommand]
         private async Task DownloadReportAsync()
         {
+            var dialog = new SaveFileDialog
+            {
+                FileName = $"focus-report-{_loadedRange.From:yyyy-MM-dd}-{_loadedRange.To.AddDays(-1):yyyy-MM-dd}.docx",
+                Filter = "Word document (*.docx)|*.docx",
+            };
+
+            if (dialog.ShowDialog() != true)
+                return;
+
             try
             {
-                var csv = await _analytics.GenerateCsvReportAsync(DateTime.Today);
-
-                var dialog = new SaveFileDialog
-                {
-                    FileName = $"focus-report-{DateTime.Today:yyyy-MM-dd}.csv",
-                    Filter = "CSV files (*.csv)|*.csv",
-                };
-
-                if (dialog.ShowDialog() == true)
-                {
-                    await File.WriteAllTextAsync(dialog.FileName, csv);
-                    Status = $"Saved to {dialog.FileName}";
-                }
+                // Off the UI thread: OpenXml's part-writing does file I/O and XML
+                // serialisation neither of which belongs on the thread the window paints on.
+                await Task.Run(() => WriteReportDocx(dialog.FileName));
+                ShowStatus("Report saved.", isError: false);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Could not export the report");
-                Status = $"Export failed: {ex.Message}";
+                _logger.LogError(ex, "Could not generate the report");
+                ShowStatus("Couldn't save the report.", isError: true);
             }
         }
+
+        /// <summary>
+        /// A brief toast rather than a permanent label: the file's location is not
+        /// information worth keeping on screen once the save has happened, and a raw path
+        /// sitting there forever reads as leftover debug output.
+        /// </summary>
+        private void ShowStatus(string message, bool isError)
+        {
+            _statusCancellation?.Cancel();
+            _statusCancellation = new CancellationTokenSource();
+            var ct = _statusCancellation.Token;
+
+            Status = message;
+            IsStatusError = isError;
+            IsStatusVisible = true;
+
+            _ = HideStatusAfterDelayAsync(ct);
+        }
+
+        private async Task HideStatusAfterDelayAsync(CancellationToken ct)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(4), ct);
+                IsStatusVisible = false;
+            }
+            catch (TaskCanceledException)
+            {
+                // Superseded by a newer save; the newer call owns hiding the toast now.
+            }
+        }
+
+        private void WriteReportDocx(string filePath)
+        {
+            var (from, to) = _loadedRange;
+
+            using var doc = WordprocessingDocument.Create(filePath, WordprocessingDocumentType.Document);
+            var mainPart = doc.AddMainDocumentPart();
+            mainPart.Document = new Document();
+            var body = mainPart.Document.AppendChild(new Body());
+
+            body.AppendChild(Heading("Focus Report", 32));
+            body.AppendChild(Paragraph($"{from:MMM d} to {to.AddDays(-1):MMM d, yyyy}", italic: true));
+            body.AppendChild(Paragraph(string.Empty));
+
+            body.AppendChild(Paragraph($"Focus score: {FocusScore}/100 ({ScoreBand})"));
+            body.AppendChild(Paragraph($"Focused time: {FocusedTime}"));
+            body.AppendChild(Paragraph($"Distracted time: {DistractedTime}"));
+            body.AppendChild(Paragraph($"Longest unbroken stretch: {LongestStretch}"));
+            body.AppendChild(Paragraph($"Days tracked: {DaysWithActivity}"));
+
+            body.AppendChild(Heading("Observations", 26));
+            foreach (var line in Observations.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var trimmed = line.Trim().TrimStart('-', ' ');
+                if (trimmed.Length > 0)
+                    body.AppendChild(Bullet(trimmed));
+            }
+
+            if (DistractionSources.Count > 0)
+            {
+                body.AppendChild(Heading("Biggest distractions", 26));
+                foreach (var app in DistractionSources)
+                    body.AppendChild(Bullet($"{app.Name} - {app.Time}"));
+            }
+
+            var activeHours = HourlyPattern.Where(h => h.TotalMinutes > 0)
+                .OrderByDescending(h => h.ProductiveMinutes).Take(5).ToList();
+            if (activeHours.Count > 0)
+            {
+                body.AppendChild(Heading("When you were sharpest", 26));
+                foreach (var hour in activeHours)
+                    body.AppendChild(Bullet($"{hour.Label}: {hour.ProductiveMinutes:F0} min focused"));
+            }
+
+            body.AppendChild(Paragraph(string.Empty));
+            body.AppendChild(Paragraph(
+                $"Generated {DateTime.Now:MMM d, yyyy h:mm tt} by Focus Assistant, entirely on this device.",
+                italic: true));
+
+            mainPart.Document.Save();
+        }
+
+        private static OpenXmlParagraph Heading(string text, int fontSizeHalfPoints) =>
+            new(new Run(
+                new RunProperties(new Bold(), new FontSize { Val = fontSizeHalfPoints.ToString() }),
+                new OpenXmlText(text) { Space = SpaceProcessingModeValues.Preserve }))
+            {
+                ParagraphProperties = new ParagraphProperties(new SpacingBetweenLines { Before = "300", After = "150" }),
+            };
+
+        private static OpenXmlParagraph Paragraph(string text, bool italic = false)
+        {
+            var runProperties = new RunProperties();
+            if (italic)
+                runProperties.Append(new Italic());
+
+            return new OpenXmlParagraph(new Run(runProperties, new OpenXmlText(text) { Space = SpaceProcessingModeValues.Preserve }));
+        }
+
+        private static OpenXmlParagraph Bullet(string text) =>
+            new(new Run(new OpenXmlText($"• {text}") { Space = SpaceProcessingModeValues.Preserve }));
 
         private static (DateTime from, DateTime to) RangeFor(InsightsPeriod period)
         {

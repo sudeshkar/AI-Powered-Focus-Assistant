@@ -102,7 +102,6 @@ namespace FocusAssistant.Hosting
                 options.UseSqlite($"Data Source={AppPaths.DatabasePath}"));
 
             services.AddSingleton(typeof(IBaseService<>), typeof(BaseService<>));
-            services.AddSingleton<AnalyticsServiceSQL>();
             services.AddSingleton<DayQueryService>();
 
             // ---- Configuration ----
