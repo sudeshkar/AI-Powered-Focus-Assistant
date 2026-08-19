@@ -18,7 +18,11 @@
             <Setter Property="Padding" Value="20"/>
         </Style>
 
-        <Style x:Key="SectionTitle" TargetType="TextBlock">
+        <!-- BasedOn the implicit TextBlock style in App.xaml: without it, naming an explicit
+             Style here replaces that default outright instead of adding to it, and every
+             heading in this card silently falls back to WPF's hardcoded black Foreground -
+             invisible on a dark background even though the app is otherwise themed. -->
+        <Style x:Key="SectionTitle" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
             <Setter Property="FontSize" Value="15"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="0,0,0,12"/>
@@ -140,7 +144,7 @@
                     <TextBlock Text="Nothing recorded yet - it appears here as soon as you switch windows."
                                Opacity="0.55" FontStyle="Italic" FontSize="13">
                         <TextBlock.Style>
-                            <Style TargetType="TextBlock">
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
                                 <Setter Property="Visibility" Value="Collapsed"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding ActivityLog.Count}" Value="0">

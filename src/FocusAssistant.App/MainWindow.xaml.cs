@@ -3,6 +3,7 @@ using FocusAssistant.Hosting;
 using FocusAssistant.Views;
 using System;
 using System.Windows;
+using Wpf.Ui.Appearance;
 using Wpf.Ui.Controls;
 
 namespace FocusAssistant
@@ -34,6 +35,13 @@ namespace FocusAssistant
             _startupState = startupState ?? throw new ArgumentNullException(nameof(startupState));
 
             InitializeComponent();
+
+            // App.xaml's ui:ThemesDictionary picks a palette but never applied one on its
+            // own, so the app rendered Light regardless of the OS setting. Watch both applies
+            // the current Windows theme immediately and keeps listening, so flipping
+            // light/dark in Windows Settings updates this window - and Mica's tint - without
+            // a restart.
+            SystemThemeWatcher.Watch(this, WindowBackdropType.Mica, updateAccents: true);
         }
 
         private async void RootNavigation_Loaded(object sender, RoutedEventArgs e)

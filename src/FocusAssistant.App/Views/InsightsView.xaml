@@ -29,18 +29,22 @@
             <Setter Property="Padding" Value="20"/>
         </Style>
 
-        <Style x:Key="SectionTitle" TargetType="TextBlock">
+        <!-- BasedOn the implicit TextBlock style in App.xaml: without it, naming an explicit
+             Style here replaces that default outright instead of adding to it, and every
+             value in this card silently falls back to WPF's hardcoded black Foreground -
+             invisible on a dark background even though the app is otherwise themed. -->
+        <Style x:Key="SectionTitle" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
             <Setter Property="FontSize" Value="15"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="0,0,0,12"/>
         </Style>
 
-        <Style x:Key="TileLabel" TargetType="TextBlock">
+        <Style x:Key="TileLabel" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Opacity" Value="0.7"/>
         </Style>
 
-        <Style x:Key="TileValue" TargetType="TextBlock">
+        <Style x:Key="TileValue" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
             <Setter Property="FontSize" Value="22"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="0,2,0,0"/>
@@ -151,7 +155,7 @@
                         </ItemsControl>
                         <TextBlock Text="No distractions recorded in this period." Opacity="0.55" FontStyle="Italic" FontSize="13">
                             <TextBlock.Style>
-                                <Style TargetType="TextBlock">
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding DistractionSources.Count}" Value="0">

@@ -6,11 +6,24 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <!-- ui:ThemesDictionary with no explicit Theme follows the
-                     Windows setting rather than pinning light or dark. -->
+                <!-- No explicit Theme here: which palette (light/dark) is actually loaded
+                     is decided at runtime by SystemThemeWatcher.Watch, called from
+                     MainWindow's constructor, which also keeps it in sync with the OS
+                     setting while the app is running. -->
                 <ui:ThemesDictionary />
                 <ui:ControlsDictionary />
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- WPF-UI deliberately does not style plain TextBlock, so every TextBlock in
+                 every view fell back to WPF's hardcoded default Foreground=Black. That read
+                 fine by accident in the light palette and was invisible the moment dark mode
+                 actually started applying (see MainWindow's SystemThemeWatcher.Watch) - dark
+                 backgrounds with black text on top of them. One implicit style, theme-aware
+                 via the same token WPF-UI's own controls use, fixes every view at once
+                 instead of hand-adding Foreground to each TextBlock in each page. -->
+            <Style TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

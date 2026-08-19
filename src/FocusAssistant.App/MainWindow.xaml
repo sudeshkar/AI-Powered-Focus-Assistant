@@ -39,6 +39,8 @@
                            IsBackButtonVisible="Collapsed"
                            PaneDisplayMode="Left"
                            OpenPaneLength="220"
+                           Transition="FadeInWithSlide"
+                           TransitionDuration="120"
                            Loaded="RootNavigation_Loaded">
 
             <ui:NavigationView.MenuItems>
