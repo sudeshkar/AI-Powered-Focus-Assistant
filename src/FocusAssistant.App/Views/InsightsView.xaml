@@ -47,7 +47,17 @@
         </Style>
     </Page.Resources>
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
+    <Grid>
+        <!-- A thin bar at the top, the way a browser shows page-load progress: visible
+             only while a real reload is happening (RefreshGate skips this entirely on a
+             cached revisit), and it never covers the existing content, so switching back
+             to a tab whose data is still fresh shows that data immediately with no bar at
+             all, while a genuine reload reads as "working" instead of "stuck". -->
+        <ProgressBar Height="2" VerticalAlignment="Top" Panel.ZIndex="1"
+                     IsIndeterminate="True" BorderThickness="0"
+                     Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}"/>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
         <StackPanel Margin="8,8,8,24">
 
             <Grid Margin="0,0,0,18">
@@ -176,4 +186,5 @@
 
         </StackPanel>
     </ScrollViewer>
+    </Grid>
 </Page>

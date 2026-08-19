@@ -167,12 +167,20 @@ namespace FocusAssistant.Hosting
             services.AddSingleton<MainWindow>();
             services.AddSingleton<TrackingViewModel>();
             services.AddSingleton<TrackingView>();
-            services.AddTransient<InsightsViewModel>();
-            services.AddTransient<InsightsView>();
-            services.AddTransient<TodayViewModel>();
-            services.AddTransient<TodayView>();
-            services.AddTransient<SettingsViewModel>();
-            services.AddTransient<SettingsView>();
+            // Singleton, not Transient: each of these is expensive to (re)populate - a
+            // database query plus, for Today and Insights, a language-model generation - and
+            // making them Singleton is what lets RefreshGate remember "I already did this
+            // recently" across a navigation instead of starting from nothing every visit.
+            // Settings benefits for a different reason: a Transient instance meant starting a
+            // model download and then navigating away orphaned that instance mid-download,
+            // and coming back showed a fresh "Not installed" view of a download still
+            // running in the background on an object nothing pointed to anymore.
+            services.AddSingleton<InsightsViewModel>();
+            services.AddSingleton<InsightsView>();
+            services.AddSingleton<TodayViewModel>();
+            services.AddSingleton<TodayView>();
+            services.AddSingleton<SettingsViewModel>();
+            services.AddSingleton<SettingsView>();
         }
 
         /// <summary>

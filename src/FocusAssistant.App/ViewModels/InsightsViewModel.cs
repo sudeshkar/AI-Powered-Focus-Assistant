@@ -60,6 +60,13 @@ namespace FocusAssistant.ViewModels
 
         [ObservableProperty] private string _status = string.Empty;
 
+        // Same reasoning as TodayViewModel's gate: only effective because this view model
+        // is registered Singleton now, so a revisit is the same instance asking "have I
+        // already loaded this recently" rather than a fresh one with no memory of anything.
+        // Longer than Today's window - a week or a month of activity does not meaningfully
+        // change from one tab switch to the next the way "right now" can.
+        private readonly RefreshGate _refreshGate = new(TimeSpan.FromSeconds(30));
+
         // Every LoadAsync (i.e. every visit to this screen, since the view model is
         // transient) starts a fresh generation. Without cancelling the previous one,
         // switching Today -> Insights -> Today -> Insights a few times in a row queues up
@@ -88,7 +95,14 @@ namespace FocusAssistant.ViewModels
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        partial void OnPeriodChanged(InsightsPeriod value) => _ = LoadAsync();
+        partial void OnPeriodChanged(InsightsPeriod value)
+        {
+            // The period just changed, so "I already loaded this recently" is no longer
+            // true for what the screen is now supposed to show - the cache has to be
+            // bypassed here even though it would otherwise still be within its window.
+            _refreshGate.Invalidate();
+            _ = LoadAsync();
+        }
 
         [RelayCommand]
         public async Task LoadAsync()
@@ -96,6 +110,13 @@ namespace FocusAssistant.ViewModels
             if (!await _startupState.DatabaseReady)
                 return;
 
+            if (!_refreshGate.ShouldRefresh(DateTimeOffset.Now))
+            {
+                _logger.LogDebug("Insights: cache hit, skipping reload");
+                return;
+            }
+
+            _logger.LogDebug("Insights: cache miss, reloading");
             IsLoading = true;
             try
             {
@@ -140,6 +161,8 @@ namespace FocusAssistant.ViewModels
                     _ = WriteObservationsAsync(score, from, to);
                 else
                     Observations = "Nothing tracked in this period yet.";
+
+                _refreshGate.MarkRefreshed(DateTimeOffset.Now);
             }
             catch (Exception ex)
             {

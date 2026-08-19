@@ -40,6 +40,12 @@ namespace FocusAssistant.ViewModels
 
         private CancellationTokenSource? _insightCancellation;
 
+        // Keeps a revisit within the window instant: no database query, no timeline
+        // recompute, no fresh language-model generation. Only meaningful because this
+        // view model is registered Singleton - a Transient one would lose this field, and
+        // the cache, on every single navigation.
+        private readonly RefreshGate _refreshGate = new(TimeSpan.FromSeconds(20));
+
         [ObservableProperty] private int _focusScore;
         [ObservableProperty] private string _scoreBand = "No data yet";
         [ObservableProperty] private string _headline = "Nothing tracked yet today.";
@@ -86,6 +92,13 @@ namespace FocusAssistant.ViewModels
             if (!await _startupState.DatabaseReady)
                 return;
 
+            if (!_refreshGate.ShouldRefresh(DateTimeOffset.Now))
+            {
+                _logger.LogDebug("Today: cache hit, skipping reload");
+                return;
+            }
+
+            _logger.LogDebug("Today: cache miss, reloading");
             IsLoading = true;
             try
             {
@@ -140,6 +153,11 @@ namespace FocusAssistant.ViewModels
                 // screen has already got everything else it needs to be useful.
                 if (score.HasData)
                     _ = WriteInsightAsync(score);
+
+                // Marked only on success: a failed load should not be treated as "fresh" -
+                // that would leave the screen showing an error for the rest of the window
+                // with no way to retry by just switching tabs and back.
+                _refreshGate.MarkRefreshed(DateTimeOffset.Now);
             }
             catch (Exception ex)
             {
