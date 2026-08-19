@@ -11,6 +11,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace FocusAssistant.ViewModels
@@ -58,6 +59,14 @@ namespace FocusAssistant.ViewModels
         [ObservableProperty] private bool _isWritingObservations;
 
         [ObservableProperty] private string _status = string.Empty;
+
+        // Every LoadAsync (i.e. every visit to this screen, since the view model is
+        // transient) starts a fresh generation. Without cancelling the previous one,
+        // switching Today -> Insights -> Today -> Insights a few times in a row queues up
+        // several ~15 second CPU-bound generations back to back on the model's single-slot
+        // semaphore - each one individually harmless, but stacked they make the whole app
+        // feel stuck for the time it takes to work through the backlog.
+        private CancellationTokenSource? _observationsCancellation;
 
         /// <summary>Average productive share per hour of the day, across the whole period.</summary>
         public ObservableCollection<HourlyFocus> HourlyPattern { get; } = [];
@@ -155,6 +164,10 @@ namespace FocusAssistant.ViewModels
         /// </remarks>
         private async Task WriteObservationsAsync(FocusScore score, DateTime from, DateTime to)
         {
+            _observationsCancellation?.Cancel();
+            _observationsCancellation = new CancellationTokenSource();
+            var ct = _observationsCancellation.Token;
+
             Observations = BuildTemplateObservations(score);
 
             if (_languageModel.Availability is ModelAvailability.Disabled)
@@ -183,9 +196,9 @@ namespace FocusAssistant.ViewModels
                           (peakHour is not null && peakHour.TotalMinutes > 0
                               ? $"Most productive hour of the day: {FormatHour(peakHour.Hour)}."
                               : ""),
-                    MaxNewTokens: 130));
+                    MaxNewTokens: 130), ct);
 
-                if (!string.IsNullOrWhiteSpace(written))
+                if (!ct.IsCancellationRequested && !string.IsNullOrWhiteSpace(written))
                     Observations = written;
             }
             catch (Exception ex)

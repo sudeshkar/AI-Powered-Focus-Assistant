@@ -183,7 +183,33 @@ namespace FocusAssistant.Intelligence.Slm
                 // goes to the thread pool rather than onto whichever thread asked.
                 await Task.Run(() =>
                 {
-                    _model = new Model(_modelDirectory);
+                    // The downloaded genai_config.json sets no thread count, which leaves
+                    // ONNX Runtime's default: use every logical core for intra-op
+                    // parallelism. For a background feature that is the wrong default - a
+                    // generation call would peg every core for its ~15 second duration and
+                    // starve the UI thread's message pump of CPU time, which is what "the
+                    // app feels unresponsive" actually was on this machine (confirmed via
+                    // Task Manager during a generation: full CPU saturation, 40+ threads).
+                    // Config.Overlay applies this in memory over the downloaded config
+                    // without touching the file on disk, so it never has to be reconciled
+                    // against the download manifest's recorded byte sizes.
+                    using var config = new Config(_modelDirectory);
+                    var reservedForUi = 2;
+                    var threads = Math.Max(1, Environment.ProcessorCount - reservedForUi);
+                    config.Overlay($$"""
+                        {
+                            "model": {
+                                "decoder": {
+                                    "session_options": {
+                                        "intra_op_num_threads": {{threads}},
+                                        "inter_op_num_threads": 1
+                                    }
+                                }
+                            }
+                        }
+                        """);
+
+                    _model = new Model(config);
                     _tokenizer = new Tokenizer(_model);
                 }).ConfigureAwait(false);
 
