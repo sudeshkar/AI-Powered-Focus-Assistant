@@ -1,4 +1,7 @@
+using FocusAssistant.Core.Session;
 using FocusAssistant.Hosting;
+using FocusAssistant.Platform.Interop;
+using FocusAssistant.Tray;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -32,6 +35,8 @@ namespace FocusAssistant
     public partial class App : Application
     {
         private IHost? _host;
+        private SingleInstanceGuard? _instanceGuard;
+        private TrayIconHost? _tray;
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -39,12 +44,35 @@ namespace FocusAssistant
 
             RegisterGlobalExceptionHandlers();
 
+            // Two copies would mean two window monitors, two overlapping sessions, and two
+            // writers on one SQLite file. Easy to reach now that closing the window only
+            // hides it - the natural thing to do next is click the shortcut again.
+            _instanceGuard = SingleInstanceGuard.TryAcquire();
+            if (_instanceGuard is null)
+            {
+                Shutdown(0);
+                return;
+            }
+
             try
             {
                 _host = AppHost.Build();
 
+                // The window closes to the tray rather than exiting, so the app must not
+                // shut down when it disappears.
+                ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
                 MainWindow = _host.Services.GetRequiredService<MainWindow>();
                 MainWindow.Show();
+
+                _instanceGuard.OnSecondInstanceLaunched(
+                    () => Dispatcher.Invoke(ShowMainWindow));
+
+                _tray = new TrayIconHost(
+                    _host.Services.GetRequiredService<ISessionEngine>(),
+                    showWindow: ShowMainWindow,
+                    exit: ExitApplication);
+                _tray.Initialize();
 
                 // Not awaited on purpose: OnStartup must return so the window can paint.
                 // StartHostAsync owns every failure from here on.
@@ -119,6 +147,32 @@ namespace FocusAssistant
             }
         }
 
+        /// <summary>Restores the window from the tray, or from a second launch.</summary>
+        private void ShowMainWindow()
+        {
+            if (MainWindow is null)
+                return;
+
+            MainWindow.Show();
+            if (MainWindow.WindowState == WindowState.Minimized)
+                MainWindow.WindowState = WindowState.Normal;
+
+            MainWindow.Activate();
+            _tray?.UpdateTooltip();
+        }
+
+        /// <summary>
+        /// The only real way out. Marks the window so its Closing handler stops cancelling,
+        /// then shuts down, which drains the write queue and closes the session properly.
+        /// </summary>
+        private void ExitApplication()
+        {
+            if (MainWindow is MainWindow window)
+                window.IsClosingForReal = true;
+
+            Shutdown();
+        }
+
         protected override void OnExit(ExitEventArgs e)
         {
             try
@@ -131,6 +185,9 @@ namespace FocusAssistant
                     _host.StopAsync(timeout.Token).GetAwaiter().GetResult();
                     _host.Dispose();
                 }
+
+                _tray?.Dispose();
+                _instanceGuard?.Dispose();
             }
             catch (Exception ex)
             {

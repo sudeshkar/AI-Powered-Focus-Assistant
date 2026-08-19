@@ -14,6 +14,7 @@ using FocusAssistant.Intelligence.Slm;
 using FocusAssistant.Core.Intelligence;
 using System.Net.Http;
 using FocusAssistant.Platform.Monitoring;
+using FocusAssistant.Platform.Startup;
 using FocusAssistant.ViewModels;
 using FocusAssistant.Views;
 using Microsoft.EntityFrameworkCore;
@@ -140,6 +141,8 @@ namespace FocusAssistant.Hosting
             services.AddHostedService<EmbeddingWarmupHostedService>();
             services.AddHostedService<ClassificationRefinementService>();
             services.AddHostedService<SessionRecoveryService>();
+            services.AddHostedService<TrackingHostedService>();
+            services.AddSingleton<IAutoStartService, AutoStartService>();
 
             // ---- Views and view models ----
             services.AddSingleton<MainWindow>();

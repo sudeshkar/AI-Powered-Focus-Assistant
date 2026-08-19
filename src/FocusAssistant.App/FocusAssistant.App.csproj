@@ -11,9 +11,19 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <!-- Only for the tray icon: WPF has never shipped one and WPF-UI removed its own in
+         v4, so WinForms' NotifyIcon is the standard way to put an app in the tray. -->
+    <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>FocusAssistant</AssemblyName>
     <RootNamespace>FocusAssistant</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- UseWindowsForms adds System.Windows.Forms to the implicit usings, which then
+         collides with WPF on Application, MessageBox and SaveFileDialog throughout the
+         app. Only the tray icon needs WinForms, and it imports the namespace itself. -->
+    <Using Remove="System.Windows.Forms" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- appsettings.json is read from AppContext.BaseDirectory at startup. -->

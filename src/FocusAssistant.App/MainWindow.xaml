@@ -10,7 +10,7 @@
         ExtendsContentIntoTitleBar="True"
         WindowBackdropType="Mica"
         WindowCornerPreference="Round"
-        Closed="Window_Closed">
+        Closing="Window_Closing">
 
     <ui:FluentWindow.Resources>
         <Style TargetType="ui:NavigationViewItem">

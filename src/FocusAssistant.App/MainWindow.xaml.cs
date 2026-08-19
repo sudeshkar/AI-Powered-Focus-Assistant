@@ -69,18 +69,27 @@ namespace FocusAssistant
             }
         }
 
-        private async void Window_Closed(object sender, EventArgs e)
+        /// <summary>
+        /// True once the app is genuinely exiting, as opposed to the window being closed.
+        /// </summary>
+        public bool IsClosingForReal { get; set; }
+
+        /// <summary>
+        /// Closing the window hides it instead of ending the day.
+        /// </summary>
+        /// <remarks>
+        /// Tracking belongs to the process now, not to this window, so closing must not stop
+        /// it - that was the old behaviour and it made the app useless the moment you tidied
+        /// your taskbar. Quit on the tray menu is the way out, and it sets
+        /// <see cref="IsClosingForReal"/> first.
+        /// </remarks>
+        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            try
-            {
-                if (_windowTracker.IsTracking)
-                    await _windowTracker.StopTrackingAsync();
-            }
-            catch (Exception ex)
-            {
-                // The window is already gone; log rather than raising more UI.
-                System.Diagnostics.Debug.WriteLine($"Error stopping tracking on close: {ex.Message}");
-            }
+            if (IsClosingForReal)
+                return;
+
+            e.Cancel = true;
+            Hide();
         }
 
         private static void ShowError(string action, Exception ex)
