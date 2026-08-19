@@ -46,7 +46,18 @@ namespace FocusAssistant.Appearance
 
             if (preference == AppThemePreference.System)
             {
-                // Re-entrant safe: Watch on an already-watched window just re-applies.
+                // Watch's own initial paint proved unreliable in practice - it would attach
+                // the live-update hook correctly but not always apply the current system
+                // theme at the moment it starts watching, so the first paint stayed on
+                // whatever ApplicationTheme the app happens to default to (Light) even when
+                // Windows was already in Dark. Resolving and applying it explicitly first
+                // means the initial paint no longer depends on Watch's own detection timing
+                // - Watch is then only responsible for catching *future* OS changes.
+                var systemTheme = ApplicationThemeManager.GetSystemTheme();
+                var resolved = systemTheme == SystemTheme.Dark ? ApplicationTheme.Dark : ApplicationTheme.Light;
+                ApplicationThemeManager.Apply(resolved, WindowBackdropType.Mica, updateAccent: true);
+
+                // Re-entrant safe: Watch on an already-watched window just re-attaches.
                 SystemThemeWatcher.Watch(_window, WindowBackdropType.Mica, updateAccents: true);
                 return;
             }

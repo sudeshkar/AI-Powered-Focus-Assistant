@@ -45,7 +45,14 @@ namespace FocusAssistant
             // the System/Light/Dark choice - loaded here from what was last saved in Settings
             // - and applies it to this window, including watching for live OS changes when
             // the choice is System.
-            themeService.AttachAndApply(this);
+            //
+            // Deferred to SourceInitialized rather than called right here: a WPF window has
+            // no real Win32 handle until its source is initialized, and SystemThemeWatcher.Watch
+            // hooks the window's message loop to hear WM_SETTINGCHANGE - with no handle yet,
+            // that hook silently has nothing to attach to. The theme still applied once at
+            // startup either way, which is why this was easy to miss: only the live
+            // "Windows theme changed while the app is running" case was actually broken.
+            SourceInitialized += (_, _) => themeService.AttachAndApply(this);
         }
 
         private async void RootNavigation_Loaded(object sender, RoutedEventArgs e)
