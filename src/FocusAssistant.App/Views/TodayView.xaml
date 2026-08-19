@@ -52,8 +52,7 @@
                      IsIndeterminate="True" BorderThickness="0"
                      Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}"/>
 
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
-        <StackPanel Margin="8,8,8,24">
+        <StackPanel Margin="8,8,20,32">
 
             <!-- Heading -->
             <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
@@ -217,6 +216,5 @@
             </Grid>
 
         </StackPanel>
-    </ScrollViewer>
     </Grid>
 </Page>

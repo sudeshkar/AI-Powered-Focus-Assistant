@@ -16,6 +16,7 @@
         <Style TargetType="ui:NavigationViewItem">
             <Setter Property="FontSize" Value="14"/>
         </Style>
+
     </ui:FluentWindow.Resources>
 
     <Grid>
