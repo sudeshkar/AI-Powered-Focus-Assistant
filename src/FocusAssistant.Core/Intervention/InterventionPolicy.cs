@@ -84,11 +84,12 @@ namespace FocusAssistant.Core.Intervention
                     ? InterventionTier.Toast
                     : InterventionTier.Ambient;
 
-                // Overlay is opt-in only, and only after the user has already ignored
-                // several toasts in this app during this session - it is never the first
-                // thing shown for anything.
-                if (tier == InterventionTier.Toast && appState.ConsecutiveIgnored >= 3 && appState.OverlayAllowed)
-                    tier = InterventionTier.Overlay;
+                // Overlay is not reachable at all yet - deliberately. It needs an explicit
+                // opt-in setting nothing has built (a full-screen interruption should never
+                // be anyone's default), so escalation stops at Toast until that setting
+                // exists to raise it. Wiring a flag for this ahead of the setting that
+                // would control it was worse than leaving the ladder honestly capped here:
+                // the field can never be set, so the compiler correctly ends up saying so.
 
                 _recentNudges.Enqueue(now);
                 appState.LastShown = now;
@@ -183,12 +184,6 @@ namespace FocusAssistant.Core.Intervention
             public int ConsecutiveIgnored;
             public bool IsOverridden;
 
-            /// <summary>
-            /// Escalation to Overlay must be switched on somewhere the user can see and
-            /// undo it (Settings, in a later phase); until that exists it stays off, so the
-            /// ladder in practice never exceeds Toast.
-            /// </summary>
-            public bool OverlayAllowed;
         }
     }
 }
