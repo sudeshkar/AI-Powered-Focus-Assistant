@@ -6,6 +6,8 @@ using FocusAssistant.Core.Monitoring;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 
 namespace FocusAssistant.Core.Session
@@ -21,6 +23,16 @@ namespace FocusAssistant.Core.Session
     /// <see cref="ActivityRecorded"/> for each completed stretch. Deciding whether
     /// and how to intervene belongs to the intervention pipeline (Phase 4), on
     /// device, with no network call anywhere in the loop.
+    /// <para>
+    /// Usage rows are written as they complete, not in one batch when the session ends.
+    /// The batch-at-the-end version kept an entire day in memory and committed nothing
+    /// until a clean shutdown, so a crash, a power cut, or Task Manager destroyed every
+    /// minute of it. That was survivable only because the window closing ended the
+    /// session; once tracking outlives the window it is the most damaging bug in the
+    /// codebase. Writes are batched on a short timer rather than issued per row - one
+    /// SaveChanges per application switch would be a disk write every few seconds all
+    /// day - which bounds the worst case to the flush interval rather than to the day.
+    /// </para>
     /// </remarks>
     public class SessionEngine : ISessionEngine, IDisposable
     {
@@ -37,7 +49,29 @@ namespace FocusAssistant.Core.Session
         private readonly IActivityClassifier _classifier;
         private readonly ILogger<SessionEngine> _logger;
 
+        /// <summary>
+        /// How long a completed usage may sit unwritten. This is the exact size of the
+        /// window a crash can destroy, so it is deliberately short; the batching exists to
+        /// avoid a write per application switch, not to defer work indefinitely.
+        /// </summary>
+        private static readonly TimeSpan FlushInterval = TimeSpan.FromSeconds(5);
+
+        /// <summary>Flush early once this many rows are waiting, however recent they are.</summary>
+        private const int FlushBatchSize = 20;
+
         private readonly object _sessionLock = new();
+
+        /// <summary>
+        /// Completed usages waiting to be written. Unbounded on purpose: dropping tracked
+        /// activity to protect memory would be trading the bug being fixed for a quieter
+        /// version of itself, and the writer drains far faster than a person switches
+        /// windows.
+        /// </summary>
+        private readonly Channel<AppUsage> _pendingWrites = Channel.CreateUnbounded<AppUsage>(
+            new UnboundedChannelOptions { SingleReader = true });
+
+        private readonly CancellationTokenSource _shutdown = new();
+        private readonly Task _writerTask;
 
         private UserSession? _currentUserSession;
         private WorkSession? _currentWorkSession;
@@ -82,6 +116,82 @@ namespace FocusAssistant.Core.Session
 
             _windowMonitor.WindowChanged += OnWindowChanged;
             _idleMonitor.IdleStateChanged += OnIdleStateChanged;
+
+            // Runs for the lifetime of the engine rather than per session, so a usage
+            // queued as a session closes cannot be stranded by the writer stopping first.
+            _writerTask = Task.Run(() => WriteQueuedUsagesAsync(_shutdown.Token), CancellationToken.None);
+        }
+
+        /// <summary>
+        /// Drains completed usages to the database, batching by size and by time.
+        /// </summary>
+        private async Task WriteQueuedUsagesAsync(CancellationToken ct)
+        {
+            var batch = new List<AppUsage>(FlushBatchSize);
+
+            try
+            {
+                while (await _pendingWrites.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
+                {
+                    // Take everything already queued, then wait out the flush interval to
+                    // let a burst of switches coalesce into one round trip.
+                    while (batch.Count < FlushBatchSize && _pendingWrites.Reader.TryRead(out var queued))
+                        batch.Add(queued);
+
+                    if (batch.Count < FlushBatchSize)
+                    {
+                        try
+                        {
+                            await Task.Delay(FlushInterval, ct).ConfigureAwait(false);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            // Shutting down: write what is in hand rather than losing it.
+                        }
+
+                        while (batch.Count < FlushBatchSize && _pendingWrites.Reader.TryRead(out var queued))
+                            batch.Add(queued);
+                    }
+
+                    await FlushAsync(batch).ConfigureAwait(false);
+                    batch.Clear();
+
+                    if (ct.IsCancellationRequested)
+                        break;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected on shutdown.
+            }
+            finally
+            {
+                // Anything queued between the last read and cancellation still belongs on
+                // disk - this is the path that runs when the app is closing.
+                while (_pendingWrites.Reader.TryRead(out var queued))
+                    batch.Add(queued);
+
+                if (batch.Count > 0)
+                    await FlushAsync(batch).ConfigureAwait(false);
+            }
+        }
+
+        private async Task FlushAsync(List<AppUsage> batch)
+        {
+            if (batch.Count == 0)
+                return;
+
+            try
+            {
+                await _appUsages.CreateRangeAsync(batch).ConfigureAwait(false);
+                _logger.LogDebug("Persisted {Count} app usage(s)", batch.Count);
+            }
+            catch (Exception ex)
+            {
+                // Losing a batch is bad but not worth stopping tracking over; the next one
+                // may well succeed, and the alternative is losing everything after it too.
+                _logger.LogError(ex, "Failed to persist {Count} app usage(s)", batch.Count);
+            }
         }
 
         public async Task StartSessionAsync(string? goal = null)
@@ -133,7 +243,6 @@ namespace FocusAssistant.Core.Session
         {
             UserSession? userSession;
             WorkSession? workSession;
-            List<AppUsage> pendingUsages;
 
             lock (_sessionLock)
             {
@@ -146,11 +255,10 @@ namespace FocusAssistant.Core.Session
                 // The session is ending; subscribers are told via SessionEnded instead.
                 _ = CloseCurrentAppUsage(DateTime.Now);
 
-                pendingUsages = workSession.AppUsages.Where(u => u.aID == 0).ToList();
-
                 workSession.EndTime = DateTime.Now;
                 workSession.Duration = workSession.EndTime - workSession.StartTime;
                 workSession.CalculateStatistics();
+                workSession.Status = WorkSessionStatus.Completed;
 
                 userSession.EndTime = DateTime.Now;
                 userSession.FocusTimeMinutes = (int)workSession.ProductiveTime.TotalMinutes;
@@ -165,11 +273,15 @@ namespace FocusAssistant.Core.Session
 
             try
             {
-                // One round trip rather than a SaveChanges per usage row.
-                await _appUsages.CreateRangeAsync(pendingUsages);
+                // The usages are already on disk, or on their way there; wait for the queue
+                // to clear so the session totals are not written before the rows they
+                // describe.
+                await DrainPendingWritesAsync().ConfigureAwait(false);
+
                 await _workSessions.UpdateAsync(workSession);
                 await _userSessions.UpdateAsync(userSession);
-                _logger.LogInformation("Session saved with {Count} app usages", pendingUsages.Count);
+                _logger.LogInformation("Session {SessionId} closed with {Count} app usages",
+                    userSession.SessionId, workSession.AppUsages.Count);
             }
             catch (Exception ex)
             {
@@ -314,6 +426,12 @@ namespace FocusAssistant.Core.Session
                 return null;
 
             _currentWorkSession.AppUsages.Add(usage);
+
+            // Queued rather than written here: this runs under the session lock on the
+            // window-poll thread, and a database round trip on that path would stall
+            // tracking for as long as the disk took.
+            _pendingWrites.Writer.TryWrite(usage);
+
             return usage;
         }
 
@@ -363,6 +481,22 @@ namespace FocusAssistant.Core.Session
             };
         }
 
+        /// <summary>
+        /// Waits for the write queue to empty, with a ceiling so a database that has stopped
+        /// responding cannot hang shutdown.
+        /// </summary>
+        private async Task DrainPendingWritesAsync()
+        {
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+
+            while (_pendingWrites.Reader.Count > 0 && DateTime.UtcNow < deadline)
+                await Task.Delay(50).ConfigureAwait(false);
+
+            if (_pendingWrites.Reader.Count > 0)
+                _logger.LogWarning("{Count} app usage(s) still unwritten after draining",
+                    _pendingWrites.Reader.Count);
+        }
+
         public void Dispose()
         {
             if (_disposed)
@@ -371,6 +505,22 @@ namespace FocusAssistant.Core.Session
             _disposed = true;
             _windowMonitor.WindowChanged -= OnWindowChanged;
             _idleMonitor.IdleStateChanged -= OnIdleStateChanged;
+
+            // Let the writer's finally block flush what is still queued before the process
+            // goes away. Bounded, because Dispose must not hang on a stuck disk.
+            _pendingWrites.Writer.TryComplete();
+            _shutdown.Cancel();
+
+            try
+            {
+                _writerTask.Wait(TimeSpan.FromSeconds(5));
+            }
+            catch (AggregateException)
+            {
+                // Cancellation, which is how this is expected to end.
+            }
+
+            _shutdown.Dispose();
         }
     }
 }

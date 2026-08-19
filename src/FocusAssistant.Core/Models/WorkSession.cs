@@ -8,6 +8,19 @@ using System.Text.Json.Serialization;
 
 namespace FocusAssistant.Core.Models
 {
+    /// <summary>How a work session ended, if it ended.</summary>
+    public enum WorkSessionStatus
+    {
+        /// <summary>Started and not yet closed. On startup this means it was abandoned.</summary>
+        Active,
+
+        /// <summary>Closed normally, with totals computed from its own in-memory usages.</summary>
+        Completed,
+
+        /// <summary>Closed by the recovery pass, with totals recomputed from persisted rows.</summary>
+        Recovered,
+    }
+
     /// <summary>A single tracked stretch of work, holding the app usages within it.</summary>
     public class WorkSession
     {
@@ -22,6 +35,18 @@ namespace FocusAssistant.Core.Models
 
         public DateTime StartTime { get; set; }
         public DateTime EndTime { get; set; }
+
+        /// <summary>
+        /// Whether this session was closed properly.
+        /// </summary>
+        /// <remarks>
+        /// App usages are written as they complete rather than in one batch at the end, so
+        /// a session killed by a crash or a power cut leaves its rows on disk but its own
+        /// totals never computed. This column is how the recovery pass on the next start
+        /// finds those sessions - EndTime alone cannot distinguish "still running" from
+        /// "abandoned", and after a crash there is nothing still running.
+        /// </remarks>
+        public WorkSessionStatus Status { get; set; } = WorkSessionStatus.Active;
         public TimeSpan Duration { get; set; }
         public TimeSpan ProductiveTime { get; set; }
         public TimeSpan DistractedTime { get; set; }

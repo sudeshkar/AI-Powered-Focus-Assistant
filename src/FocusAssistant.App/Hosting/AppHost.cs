@@ -136,6 +136,7 @@ namespace FocusAssistant.Hosting
             services.AddHostedService<DatabaseMigrationHostedService>();
             services.AddHostedService<EmbeddingWarmupHostedService>();
             services.AddHostedService<ClassificationRefinementService>();
+            services.AddHostedService<SessionRecoveryService>();
 
             // ---- Views and view models ----
             services.AddSingleton<MainWindow>();
