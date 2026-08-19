@@ -7,6 +7,9 @@ using FocusAssistant.Core.Reports;
 using FocusAssistant.Core.Session;
 using FocusAssistant.Data.EF;
 using FocusAssistant.Data.Queries;
+using FocusAssistant.Intelligence.Classification;
+using FocusAssistant.Intelligence.Embeddings;
+using FocusAssistant.Intelligence.Scoring;
 using FocusAssistant.Platform.Monitoring;
 using FocusAssistant.ViewModels;
 using FocusAssistant.Views;
@@ -95,8 +98,29 @@ namespace FocusAssistant.Hosting
             // ---- Configuration ----
             services.AddSingleton<IAppCategorizationConfig, AppCategorizationConfig>();
 
+            // ---- Classification ----
+            // The ruleset is registered concretely and then bound to both interfaces it
+            // implements, so there is exactly one instance and therefore one set of caches.
+            // IProductivityStrategy survives for the callers that still want a plain bool;
+            // IRuleMatcher is the richer form the layered classifier consumes.
+            services.AddSingleton<RuleBasedProductivityStrategy>();
+            services.AddSingleton<IProductivityStrategy>(sp => sp.GetRequiredService<RuleBasedProductivityStrategy>());
+            services.AddSingleton<IRuleMatcher>(sp => sp.GetRequiredService<RuleBasedProductivityStrategy>());
+
+            // Until the "This is work" button exists there is nothing to store, but the
+            // layer is registered so the classifier is written the same way either way.
+            services.AddSingleton<IUserOverrideStore, NoUserOverrideStore>();
+
+            // The generator itself is a registration so its lifetime and disposal are the
+            // container's problem, not something two factory lambdas have to coordinate.
+            services.AddSingleton(_ => MiniLmEmbeddingGenerator.Load(
+                Path.Combine(AppContext.BaseDirectory, "Models", "minilm")));
+
+            AddIntelligence(services);
+
+            services.AddSingleton<IActivityClassifier, LayeredActivityClassifier>();
+
             // ---- Monitoring and sessions ----
-            services.AddSingleton<IProductivityStrategy, RuleBasedProductivityStrategy>();
             services.AddSingleton<IWindowMonitor>(sp => new WindowsApiWindowMonitor(
                 sp.GetRequiredService<ILogger<WindowsApiWindowMonitor>>(),
                 sp.GetRequiredService<IOptions<MonitoringOptions>>().Value.WindowPollInterval));
@@ -110,6 +134,8 @@ namespace FocusAssistant.Hosting
             // ---- Startup ----
             services.AddSingleton<StartupState>();
             services.AddHostedService<DatabaseMigrationHostedService>();
+            services.AddHostedService<EmbeddingWarmupHostedService>();
+            services.AddHostedService<ClassificationRefinementService>();
 
             // ---- Views and view models ----
             services.AddSingleton<MainWindow>();
@@ -122,5 +148,70 @@ namespace FocusAssistant.Hosting
             services.AddTransient<DashboardViewModel>();
             services.AddTransient<DashboardView>();
         }
+
+        /// <summary>
+        /// Registers the on-device model layer, or abstaining stand-ins for it.
+        /// </summary>
+        /// <remarks>
+        /// Loading the ONNX session is the one piece of I/O that cannot be deferred to a
+        /// hosted service, because the object it produces is the dependency. It is cheap
+        /// (~150 ms, measured) and it happens once, but if it throws - a corrupt file, an
+        /// unsupported CPU - the whole graph would fail to build and the app would not
+        /// start. So a failure here degrades to the null implementations instead: the app
+        /// runs on keyword rules exactly as it did before this model existed.
+        /// </remarks>
+        private static void AddIntelligence(IServiceCollection services)
+        {
+            services.AddSingleton<ISemanticClassifier>(sp =>
+            {
+                var options = sp.GetRequiredService<IOptions<IntelligenceOptions>>().Value;
+                var logger = sp.GetRequiredService<ILogger<EmbeddingSemanticClassifier>>();
+
+                if (!options.EnableSemanticClassifier)
+                {
+                    logger.LogInformation("Semantic classifier disabled by configuration");
+                    return new NullSemanticClassifier();
+                }
+
+                try
+                {
+                    var embedder = GetEmbedder(sp);
+                    return new EmbeddingSemanticClassifier(
+                        embedder, logger, options.MinimumSimilarity, options.MinimumMargin);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Embedding model could not be loaded; using keyword rules only");
+                    return new NullSemanticClassifier();
+                }
+            });
+
+            services.AddSingleton<IGoalRelevanceScorer>(sp =>
+            {
+                var options = sp.GetRequiredService<IOptions<IntelligenceOptions>>().Value;
+                if (!options.EnableSemanticClassifier)
+                    return new NullGoalRelevanceScorer();
+
+                try
+                {
+                    return new EmbeddingGoalRelevanceScorer(
+                        GetEmbedder(sp), sp.GetRequiredService<ILogger<EmbeddingGoalRelevanceScorer>>());
+                }
+                catch (Exception ex)
+                {
+                    sp.GetRequiredService<ILogger<EmbeddingGoalRelevanceScorer>>()
+                        .LogError(ex, "Goal relevance scoring unavailable");
+                    return new NullGoalRelevanceScorer();
+                }
+            });
+        }
+
+        /// <summary>
+        /// The single embedding model instance, shared by the classifier and the goal
+        /// scorer. Two ONNX sessions over the same 23MB file would double the memory and
+        /// buy nothing - the generator already serialises its own calls.
+        /// </summary>
+        private static MiniLmEmbeddingGenerator GetEmbedder(IServiceProvider sp) =>
+            sp.GetRequiredService<MiniLmEmbeddingGenerator>();
     }
 }

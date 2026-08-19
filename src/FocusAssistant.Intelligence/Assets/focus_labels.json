@@ -1,0 +1,53 @@
+{
+  "comment": [
+    "Natural-language descriptions of activities, embedded once at startup and compared",
+    "against what the user is actually doing. Phrasing matters more than keywords here:",
+    "the model matches meaning, so 'scrolling an endless social media feed' generalises to",
+    "sites nobody listed, which is the whole reason this exists alongside the keyword rules.",
+    "Polarity is Productive or Distracting. Keep entries as full activity descriptions, not",
+    "bare nouns - 'youtube' embeds poorly, 'watching a video for entertainment' does not."
+  ],
+  "labels": [
+    { "text": "writing and editing source code in a code editor", "category": "Development", "polarity": "Productive" },
+    { "text": "debugging a program and reading a stack trace", "category": "Development", "polarity": "Productive" },
+    { "text": "reviewing a pull request or reading a code diff", "category": "Development", "polarity": "Productive" },
+    { "text": "running commands in a terminal or command prompt", "category": "Development", "polarity": "Productive" },
+    { "text": "reading technical documentation or an API reference", "category": "Research", "polarity": "Productive" },
+    { "text": "searching for a solution to a programming problem", "category": "Research", "polarity": "Productive" },
+    { "text": "managing tasks on a project board or issue tracker", "category": "Planning", "polarity": "Productive" },
+    { "text": "writing a document, report, or article", "category": "Writing", "polarity": "Productive" },
+    { "text": "editing a spreadsheet or working with data in a table", "category": "Office", "polarity": "Productive" },
+    { "text": "preparing slides for a presentation", "category": "Office", "polarity": "Productive" },
+    { "text": "writing or replying to a work email", "category": "Communication", "polarity": "Productive" },
+    { "text": "in a video call or an online meeting", "category": "Communication", "polarity": "Productive" },
+    { "text": "discussing work with colleagues in a team chat channel", "category": "Communication", "polarity": "Productive" },
+    { "text": "designing a user interface or editing a graphic", "category": "Design", "polarity": "Productive" },
+    { "text": "taking notes or organising personal knowledge", "category": "Writing", "polarity": "Productive" },
+    { "text": "studying course material or following a tutorial", "category": "Learning", "polarity": "Productive" },
+    { "text": "reviewing analytics dashboards or business metrics", "category": "Analysis", "polarity": "Productive" },
+    { "text": "managing files and folders on the computer", "category": "Admin", "polarity": "Productive" },
+
+    { "text": "reading a question and answer page about a programming error", "category": "Research", "polarity": "Productive" },
+    { "text": "reading a forum thread about how to fix a software problem", "category": "Research", "polarity": "Productive" },
+    { "text": "testing an API endpoint or inspecting a network request", "category": "Development", "polarity": "Productive" },
+    { "text": "laying out screens and components in a design tool", "category": "Design", "polarity": "Productive" },
+    { "text": "reading and replying to messages in an inbox", "category": "Communication", "polarity": "Productive" },
+    { "text": "browsing pictures of animals and cute content", "category": "Entertainment", "polarity": "Distracting" },
+    { "text": "adding items to a shopping basket on an online store", "category": "Shopping", "polarity": "Distracting" },
+
+    { "text": "scrolling an endless social media feed", "category": "Social", "polarity": "Distracting" },
+    { "text": "reading posts and comments on a discussion forum for fun", "category": "Social", "polarity": "Distracting" },
+    { "text": "watching a video for entertainment", "category": "Entertainment", "polarity": "Distracting" },
+    { "text": "watching a film or a television series on a streaming service", "category": "Entertainment", "polarity": "Distracting" },
+    { "text": "playing a video game", "category": "Gaming", "polarity": "Distracting" },
+    { "text": "browsing a game store or looking at games to buy", "category": "Gaming", "polarity": "Distracting" },
+    { "text": "listening to music or browsing a music streaming app", "category": "Entertainment", "polarity": "Distracting" },
+    { "text": "shopping for products on a retail website", "category": "Shopping", "polarity": "Distracting" },
+    { "text": "reading the news or celebrity gossip", "category": "News", "polarity": "Distracting" },
+    { "text": "looking at memes and funny pictures", "category": "Entertainment", "polarity": "Distracting" },
+    { "text": "chatting with friends about something unrelated to work", "category": "Social", "polarity": "Distracting" },
+    { "text": "browsing sports scores and match highlights", "category": "Entertainment", "polarity": "Distracting" },
+    { "text": "watching short vertical videos one after another", "category": "Entertainment", "polarity": "Distracting" },
+    { "text": "booking a holiday or browsing travel destinations", "category": "Personal", "polarity": "Distracting" }
+  ]
+}

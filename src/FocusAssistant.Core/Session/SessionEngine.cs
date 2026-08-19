@@ -34,6 +34,7 @@ namespace FocusAssistant.Core.Session
         private readonly IWindowMonitor _windowMonitor;
         private readonly IIdleMonitor _idleMonitor;
         private readonly IProductivityStrategy _productivityStrategy;
+        private readonly IActivityClassifier _classifier;
         private readonly ILogger<SessionEngine> _logger;
 
         private readonly object _sessionLock = new();
@@ -67,6 +68,7 @@ namespace FocusAssistant.Core.Session
             IWindowMonitor windowMonitor,
             IIdleMonitor idleMonitor,
             IProductivityStrategy productivityStrategy,
+            IActivityClassifier classifier,
             ILogger<SessionEngine> logger)
         {
             _userSessions = userSessions ?? throw new ArgumentNullException(nameof(userSessions));
@@ -75,6 +77,7 @@ namespace FocusAssistant.Core.Session
             _windowMonitor = windowMonitor ?? throw new ArgumentNullException(nameof(windowMonitor));
             _idleMonitor = idleMonitor ?? throw new ArgumentNullException(nameof(idleMonitor));
             _productivityStrategy = productivityStrategy ?? throw new ArgumentNullException(nameof(productivityStrategy));
+            _classifier = classifier ?? throw new ArgumentNullException(nameof(classifier));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
             _windowMonitor.WindowChanged += OnWindowChanged;
@@ -140,7 +143,8 @@ namespace FocusAssistant.Core.Session
                 userSession = _currentUserSession;
                 workSession = _currentWorkSession;
 
-                CloseCurrentAppUsage(DateTime.Now);
+                // The session is ending; subscribers are told via SessionEnded instead.
+                _ = CloseCurrentAppUsage(DateTime.Now);
 
                 pendingUsages = workSession.AppUsages.Where(u => u.aID == 0).ToList();
 
@@ -195,6 +199,8 @@ namespace FocusAssistant.Core.Session
 
         private void OnIdleStateChanged(object? sender, IdleStateChangedEventArgs e)
         {
+            AppUsage? completed = null;
+
             lock (_sessionLock)
             {
                 if (_currentWorkSession is null)
@@ -204,7 +210,7 @@ namespace FocusAssistant.Core.Session
                 {
                     // Idle time is not work time: close the current usage so the
                     // duration does not absorb the whole break.
-                    CloseCurrentAppUsage(e.ChangeTime);
+                    completed = CloseCurrentAppUsage(e.ChangeTime);
                     _breakStartTime = e.ChangeTime;
                 }
                 else if (_breakStartTime.HasValue)
@@ -217,6 +223,8 @@ namespace FocusAssistant.Core.Session
                         BeginAppUsageCore(appName, windowTitle, e.ChangeTime);
                 }
             }
+
+            RaiseActivityRecorded(completed);
         }
 
         private void OnWindowChanged(object? sender, AppWindowChangedEventArgs e)
@@ -225,14 +233,17 @@ namespace FocusAssistant.Core.Session
             // exception on a threadpool thread takes the process down.
             try
             {
+                AppUsage? completed;
                 lock (_sessionLock)
                 {
                     if (_currentWorkSession is null)
                         return;
 
-                    CloseCurrentAppUsage(e.ChangeTime);
+                    completed = CloseCurrentAppUsage(e.ChangeTime);
                     BeginAppUsageCore(e.CurrentAppName, e.CurrentWindowTitle, e.ChangeTime);
                 }
+
+                RaiseActivityRecorded(completed);
             }
             catch (Exception ex)
             {
@@ -261,15 +272,37 @@ namespace FocusAssistant.Core.Session
                 AppName = appName,
                 WindowTitle = windowTitle ?? string.Empty,
                 StartTime = startTime,
-                IsProductive = _productivityStrategy.IsProductive(appName, windowTitle),
+                // ClassifyFast, never ClassifyAsync: this runs inside the session lock on
+                // the window-poll thread. The refinement service revisits the same activity
+                // off the hot path and lets the model correct this.
+                IsProductive = _classifier.ClassifyFast(new ActivityContext(
+                    appName,
+                    windowTitle,
+                    _productivityStrategy.GetCategory(appName),
+                    startTime,
+                    CurrentGoal)).IsProductive,
             };
         }
 
-        /// <summary>Caller must hold the session lock.</summary>
-        private void CloseCurrentAppUsage(DateTime endTime)
+        /// <summary>
+        /// Closes the current stretch. Caller must hold the session lock.
+        /// </summary>
+        /// <returns>
+        /// The completed usage, for the caller to announce <i>after</i> releasing the lock,
+        /// or null when the stretch was too short to record.
+        /// </returns>
+        /// <remarks>
+        /// This used to raise ActivityRecorded itself, from inside the lock, with a comment
+        /// requiring every subscriber to stay fast. That constraint is not enforceable: the
+        /// intervention pipeline is the first real subscriber, it runs a model, and a
+        /// subscriber that awaits while holding this lock stalls the window-poll thread and
+        /// freezes tracking. Returning the usage instead moves the decision to the one place
+        /// that knows when the lock is free.
+        /// </remarks>
+        private AppUsage? CloseCurrentAppUsage(DateTime endTime)
         {
             if (_currentAppUsage is null || _currentWorkSession is null)
-                return;
+                return null;
 
             var usage = _currentAppUsage;
             _currentAppUsage = null;
@@ -278,13 +311,20 @@ namespace FocusAssistant.Core.Session
             usage.Duration = endTime - usage.StartTime;
 
             if (usage.Duration < MinimumUsageDuration)
-                return;
+                return null;
 
             _currentWorkSession.AppUsages.Add(usage);
+            return usage;
+        }
 
-            // Raised from inside the lock, which is fine as long as subscribers
-            // stay fast (queue work, do not block). The intervention pipeline
-            // (Phase 4) reacts to this instead of SessionEngine calling out itself.
+        /// <summary>
+        /// Announces a completed stretch. Must be called with the session lock released.
+        /// </summary>
+        private void RaiseActivityRecorded(AppUsage? usage)
+        {
+            if (usage is null)
+                return;
+
             ActivityRecorded?.Invoke(this, usage);
         }
 
