@@ -6,6 +6,10 @@ using System.Diagnostics;
 // vocabulary file still returns vectors, it just returns meaningless ones, and every
 // number below collapses toward the middle when that happens.
 
+// The language model is 2.78GB, so it is opt-in: pass "slm" to exercise it.
+if (args.Contains("slm"))
+    return await IntelligenceSmokeTest.SlmChecks.RunAsync() == 0 ? 0 : 1;
+
 var modelDir = Path.Combine(AppContext.BaseDirectory, "Models", "minilm");
 Console.WriteLine($"Loading model from {modelDir}");
 

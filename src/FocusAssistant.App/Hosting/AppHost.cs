@@ -10,6 +10,9 @@ using FocusAssistant.Data.Queries;
 using FocusAssistant.Intelligence.Classification;
 using FocusAssistant.Intelligence.Embeddings;
 using FocusAssistant.Intelligence.Scoring;
+using FocusAssistant.Intelligence.Slm;
+using FocusAssistant.Core.Intelligence;
+using System.Net.Http;
 using FocusAssistant.Platform.Monitoring;
 using FocusAssistant.ViewModels;
 using FocusAssistant.Views;
@@ -148,6 +151,8 @@ namespace FocusAssistant.Hosting
             services.AddSingleton<RecommendationsView>();
             services.AddTransient<DashboardViewModel>();
             services.AddTransient<DashboardView>();
+            services.AddTransient<SettingsViewModel>();
+            services.AddTransient<SettingsView>();
         }
 
         /// <summary>
@@ -185,6 +190,30 @@ namespace FocusAssistant.Hosting
                     logger.LogError(ex, "Embedding model could not be loaded; using keyword rules only");
                     return new NullSemanticClassifier();
                 }
+            });
+
+            // ---- Local language model ----
+            // A long timeout, not the default 100 seconds: this client pulls a 2.7GB file,
+            // and the per-read timeout is what matters on a slow connection.
+            services.AddSingleton(_ => new HttpClient { Timeout = TimeSpan.FromMinutes(30) });
+
+            services.AddSingleton<IModelProvisioner>(sp => new HuggingFaceModelProvisioner(
+                sp.GetRequiredService<HttpClient>(),
+                sp.GetRequiredService<ILogger<HuggingFaceModelProvisioner>>(),
+                Path.Combine(AppContext.BaseDirectory, "Assets", "phi35_manifest.json"),
+                Path.Combine(AppPaths.ModelDirectory, "phi-3.5-mini-int4")));
+
+            services.AddSingleton<ILocalLanguageModel>(sp =>
+            {
+                var options = sp.GetRequiredService<IOptions<IntelligenceOptions>>().Value;
+                if (!options.EnableSemanticClassifier)
+                    return new NullLocalLanguageModel();
+
+                return new PhiLocalLanguageModel(
+                    sp.GetRequiredService<IModelProvisioner>(),
+                    sp.GetRequiredService<ILogger<PhiLocalLanguageModel>>(),
+                    Path.Combine(AppPaths.ModelDirectory, "phi-3.5-mini-int4"),
+                    options.SlmIdleUnloadTimeout);
             });
 
             services.AddSingleton<IGoalRelevanceScorer>(sp =>

@@ -1,0 +1,23 @@
+{
+  "comment": [
+    "The exact files that make up the Phi-3.5-mini INT4 CPU build, with the sizes the",
+    "Hugging Face API reports for them. Sizes are checked after every download: a",
+    "truncated .onnx.data does not fail to load, it crashes inside ORT's native layer with",
+    "a message that says nothing about the real cause. Verifying length turns that into a",
+    "re-download of one file.",
+    "configuration_phi3.py is deliberately absent - it is Python for the transformers",
+    "runtime and ORT GenAI has no use for it."
+  ],
+  "repository": "microsoft/Phi-3.5-mini-instruct-onnx",
+  "revision": "main",
+  "directory": "cpu_and_mobile/cpu-int4-awq-block-128-acc-level-4",
+  "files": [
+    { "name": "genai_config.json", "size": 1580 },
+    { "name": "config.json", "size": 3451 },
+    { "name": "special_tokens_map.json", "size": 569 },
+    { "name": "tokenizer_config.json", "size": 3364 },
+    { "name": "tokenizer.json", "size": 1844436 },
+    { "name": "phi-3.5-mini-instruct-cpu-int4-awq-block-128-acc-level-4.onnx", "size": 52176615 },
+    { "name": "phi-3.5-mini-instruct-cpu-int4-awq-block-128-acc-level-4.onnx.data", "size": 2728144896 }
+  ]
+}

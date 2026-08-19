@@ -80,7 +80,7 @@ namespace FocusAssistant
                     "Analytics" => _serviceProvider.GetRequiredService<AnalyticsView>(),
                     "Recommendations" => _serviceProvider.GetRequiredService<RecommendationsView>(),
                     "Achievements" => Placeholder("Achievements"),
-                    "Settings" => Placeholder("Settings"),
+                    "Settings" => _serviceProvider.GetRequiredService<SettingsView>(),
                     _ => MainContentFrame.Content,
                 };
             }

@@ -1,0 +1,87 @@
+<UserControl x:Class="FocusAssistant.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             mc:Ignorable="d"
+             d:DesignHeight="600" d:DesignWidth="900">
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="20"/>
+            <Setter Property="Margin" Value="0,0,0,16"/>
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="8" MaxWidth="760" HorizontalAlignment="Left">
+
+            <TextBlock Text="Settings" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,16"/>
+
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="On-device AI" FontSize="16" FontWeight="SemiBold"/>
+
+                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Opacity="0.85"
+                               Text="Optional. Focus Assistant already works without this — activity is classified on device by a small model that ships with the app. Adding the language model lets it write your daily summary and word its nudges more naturally."/>
+
+                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Opacity="0.85"
+                               Text="It is downloaded once and runs entirely on this computer. Nothing you do is ever sent anywhere."/>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                        <TextBlock Text="Download size:" Opacity="0.7"/>
+                        <TextBlock Text="{Binding SizeText}" Margin="8,0,0,0" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding DiskText}" Margin="20,0,0,0" Opacity="0.7"/>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                        <TextBlock Text="Status:" Opacity="0.7"/>
+                        <TextBlock Text="{Binding StatusText}" Margin="8,0,0,0"/>
+                    </StackPanel>
+
+                    <ProgressBar Height="6" Margin="0,12,0,0"
+                                 Minimum="0" Maximum="100"
+                                 Value="{Binding ProgressPercent, Mode=OneWay}"
+                                 Visibility="{Binding IsDownloading, Converter={StaticResource BoolToVisibility}}"/>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                        <ui:Button Content="Download" Appearance="Primary"
+                                   Command="{Binding DownloadCommand}"
+                                   IsEnabled="{Binding CanDownload}"/>
+                        <ui:Button Content="Cancel" Margin="8,0,0,0"
+                                   Command="{Binding CancelCommand}"
+                                   IsEnabled="{Binding CanCancel}"/>
+                        <ui:Button Content="Test model" Margin="8,0,0,0"
+                                   Command="{Binding TestCommand}"
+                                   IsEnabled="{Binding IsDownloaded}"/>
+                        <ui:Button Content="Delete" Margin="8,0,0,0"
+                                   Command="{Binding DeleteCommand}"
+                                   IsEnabled="{Binding CanDelete}"/>
+                    </StackPanel>
+
+                    <Border Margin="0,16,0,0" Padding="12" CornerRadius="6"
+                            Background="{DynamicResource ControlFillColorDefaultBrush}"
+                            Visibility="{Binding TestOutput, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}">
+                        <TextBlock Text="{Binding TestOutput}" TextWrapping="Wrap" FontStyle="Italic"/>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="Your data" FontSize="16" FontWeight="SemiBold"/>
+                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Opacity="0.85"
+                               Text="Everything stays on this machine, in a database under your local app data. Window titles can include document names and page titles, so treat that file as personal."/>
+                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Opacity="0.6" FontStyle="Italic"
+                               Text="Retention limits, per-app exclusions, pause, and delete-my-data are coming next."/>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
