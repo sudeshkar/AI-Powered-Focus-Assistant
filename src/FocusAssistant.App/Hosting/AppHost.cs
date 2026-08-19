@@ -161,6 +161,8 @@ namespace FocusAssistant.Hosting
             services.AddHostedService<RetentionHostedService>();
             services.AddSingleton<FocusAssistant.Privacy.PauseController>();
             services.AddSingleton<IAutoStartService, AutoStartService>();
+            services.AddSingleton<FocusAssistant.Appearance.ThemePreferenceStore>();
+            services.AddSingleton<FocusAssistant.Appearance.ThemeService>();
 
             // ---- Views and view models ----
             services.AddSingleton<MainWindow>();

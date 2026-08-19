@@ -1,9 +1,9 @@
+using FocusAssistant.Appearance;
 using FocusAssistant.Core.Monitoring;
 using FocusAssistant.Hosting;
 using FocusAssistant.Views;
 using System;
 using System.Windows;
-using Wpf.Ui.Appearance;
 using Wpf.Ui.Controls;
 
 namespace FocusAssistant
@@ -28,7 +28,11 @@ namespace FocusAssistant
         private readonly WindowTracker _windowTracker;
         private readonly StartupState _startupState;
 
-        public MainWindow(IServiceProvider serviceProvider, WindowTracker windowTracker, StartupState startupState)
+        public MainWindow(
+            IServiceProvider serviceProvider,
+            WindowTracker windowTracker,
+            StartupState startupState,
+            ThemeService themeService)
         {
             _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
             _windowTracker = windowTracker ?? throw new ArgumentNullException(nameof(windowTracker));
@@ -37,11 +41,11 @@ namespace FocusAssistant
             InitializeComponent();
 
             // App.xaml's ui:ThemesDictionary picks a palette but never applied one on its
-            // own, so the app rendered Light regardless of the OS setting. Watch both applies
-            // the current Windows theme immediately and keeps listening, so flipping
-            // light/dark in Windows Settings updates this window - and Mica's tint - without
-            // a restart.
-            SystemThemeWatcher.Watch(this, WindowBackdropType.Mica, updateAccents: true);
+            // own, so the app rendered Light regardless of the OS setting. ThemeService owns
+            // the System/Light/Dark choice - loaded here from what was last saved in Settings
+            // - and applies it to this window, including watching for live OS changes when
+            // the choice is System.
+            themeService.AttachAndApply(this);
         }
 
         private async void RootNavigation_Loaded(object sender, RoutedEventArgs e)

@@ -4,11 +4,13 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:conv="clr-namespace:FocusAssistant.Converters"
              mc:Ignorable="d"
              d:DesignHeight="600" d:DesignWidth="900">
 
     <Page.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+        <conv:ThemePreferenceToAppearanceConverter x:Key="ThemeToAppearance"/>
 
         <Style x:Key="Card" TargetType="Border">
             <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}"/>
@@ -21,6 +23,23 @@
         <StackPanel Margin="8,8,20,32" MaxWidth="760" HorizontalAlignment="Left">
 
             <TextBlock Text="Settings" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,16"/>
+
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="Appearance" FontSize="16" FontWeight="SemiBold"/>
+                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Opacity="0.85"
+                               Text="System follows Windows automatically, including if you change it later. Light and Dark stay pinned regardless of the Windows setting."/>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                        <ui:Button Content="System" Command="{Binding SetThemeCommand}" CommandParameter="System"
+                                   Appearance="{Binding SelectedTheme, Converter={StaticResource ThemeToAppearance}, ConverterParameter=System}"/>
+                        <ui:Button Content="Light" Margin="8,0,0,0" Command="{Binding SetThemeCommand}" CommandParameter="Light"
+                                   Appearance="{Binding SelectedTheme, Converter={StaticResource ThemeToAppearance}, ConverterParameter=Light}"/>
+                        <ui:Button Content="Dark" Margin="8,0,0,0" Command="{Binding SetThemeCommand}" CommandParameter="Dark"
+                                   Appearance="{Binding SelectedTheme, Converter={StaticResource ThemeToAppearance}, ConverterParameter=Dark}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
 
             <Border Style="{StaticResource Card}">
                 <StackPanel>

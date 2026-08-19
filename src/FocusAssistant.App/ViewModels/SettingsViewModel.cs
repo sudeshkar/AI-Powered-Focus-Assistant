@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using FocusAssistant.Appearance;
 using FocusAssistant.Core.Intelligence;
 using FocusAssistant.Configuration;
 using FocusAssistant.Hosting;
@@ -30,9 +31,13 @@ namespace FocusAssistant.ViewModels
         private readonly PauseController _pauseController;
         private readonly DataManagementService _dataManagement;
         private readonly IOptionsMonitor<PrivacyOptions> _privacyOptions;
+        private readonly ThemeService _themeService;
         private readonly ILogger<SettingsViewModel> _logger;
 
         private CancellationTokenSource? _downloadCancellation;
+
+        [ObservableProperty]
+        private AppThemePreference _selectedTheme;
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CanDownload))]
@@ -103,6 +108,7 @@ namespace FocusAssistant.ViewModels
             PauseController pauseController,
             DataManagementService dataManagement,
             IOptionsMonitor<PrivacyOptions> privacyOptions,
+            ThemeService themeService,
             ILogger<SettingsViewModel> logger)
         {
             _provisioner = provisioner ?? throw new ArgumentNullException(nameof(provisioner));
@@ -110,9 +116,14 @@ namespace FocusAssistant.ViewModels
             _pauseController = pauseController ?? throw new ArgumentNullException(nameof(pauseController));
             _dataManagement = dataManagement ?? throw new ArgumentNullException(nameof(dataManagement));
             _privacyOptions = privacyOptions ?? throw new ArgumentNullException(nameof(privacyOptions));
+            _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
             _pauseController.PropertyChanged += (_, _) => RefreshPauseState();
+
+            // Read once, from whatever MainWindow already applied at startup, rather than
+            // both places loading the store independently and risking the two disagreeing.
+            _selectedTheme = _themeService.Current;
         }
 
         public void Refresh()
@@ -231,6 +242,19 @@ namespace FocusAssistant.ViewModels
 
         [RelayCommand]
         private Task ResumeTrackingAsync() => _pauseController.ResumeAsync();
+
+        /// <summary>Parses from a XAML CommandParameter string rather than binding directly
+        /// to the enum, which would need the CLR namespace declared and an x:Static
+        /// reference on every button for a three-way choice this small.</summary>
+        [RelayCommand]
+        private void SetTheme(string theme)
+        {
+            if (!Enum.TryParse<AppThemePreference>(theme, out var preference))
+                return;
+
+            SelectedTheme = preference;
+            _themeService.SetPreference(preference);
+        }
 
         [RelayCommand]
         private void OpenDataFolder() => _dataManagement.OpenDataFolder();
