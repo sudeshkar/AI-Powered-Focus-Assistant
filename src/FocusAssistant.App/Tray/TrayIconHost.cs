@@ -1,4 +1,5 @@
 using FocusAssistant.Core.Session;
+using FocusAssistant.Privacy;
 using System;
 using System.Drawing;
 using System.Windows.Forms;
@@ -25,15 +26,17 @@ namespace FocusAssistant.Tray
     public sealed class TrayIconHost : IDisposable
     {
         private readonly ISessionEngine _sessionEngine;
+        private readonly PauseController _pauseController;
         private readonly Action _showWindow;
         private readonly Action _exit;
 
         private NotifyIcon? _icon;
         private bool _disposed;
 
-        public TrayIconHost(ISessionEngine sessionEngine, Action showWindow, Action exit)
+        public TrayIconHost(ISessionEngine sessionEngine, PauseController pauseController, Action showWindow, Action exit)
         {
             _sessionEngine = sessionEngine ?? throw new ArgumentNullException(nameof(sessionEngine));
+            _pauseController = pauseController ?? throw new ArgumentNullException(nameof(pauseController));
             _showWindow = showWindow ?? throw new ArgumentNullException(nameof(showWindow));
             _exit = exit ?? throw new ArgumentNullException(nameof(exit));
         }
@@ -43,7 +46,25 @@ namespace FocusAssistant.Tray
             var menu = new ContextMenuStrip();
             menu.Items.Add("Open Focus Assistant", null, (_, _) => _showWindow());
             menu.Items.Add(new ToolStripSeparator());
+
+            var pauseMenu = new ToolStripMenuItem("Pause tracking");
+            pauseMenu.DropDownItems.Add("For 30 minutes", null, async (_, _) => await _pauseController.PauseAsync(TimeSpan.FromMinutes(30)));
+            pauseMenu.DropDownItems.Add("For 2 hours", null, async (_, _) => await _pauseController.PauseAsync(TimeSpan.FromHours(2)));
+            pauseMenu.DropDownItems.Add("Until tomorrow", null, async (_, _) => await _pauseController.PauseUntilTomorrowAsync());
+            menu.Items.Add(pauseMenu);
+
+            var resumeItem = new ToolStripMenuItem("Resume tracking", null, async (_, _) => await _pauseController.ResumeAsync());
+            menu.Items.Add(resumeItem);
+
+            menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Quit", null, (_, _) => _exit());
+
+            // Only one of "Pause tracking" / "Resume tracking" makes sense at a time.
+            menu.Opening += (_, _) =>
+            {
+                pauseMenu.Visible = !_pauseController.IsPaused;
+                resumeItem.Visible = _pauseController.IsPaused;
+            };
 
             _icon = new NotifyIcon
             {
@@ -73,7 +94,13 @@ namespace FocusAssistant.Tray
             try
             {
                 string text;
-                if (!_sessionEngine.IsSessionActive)
+                if (_pauseController.IsPaused)
+                {
+                    text = _pauseController.ResumesAt is { } resumesAt
+                        ? $"Focus Assistant - paused until {resumesAt.LocalDateTime:t}"
+                        : "Focus Assistant - paused";
+                }
+                else if (!_sessionEngine.IsSessionActive)
                 {
                     text = "Focus Assistant - not tracking";
                 }

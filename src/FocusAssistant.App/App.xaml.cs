@@ -70,6 +70,7 @@ namespace FocusAssistant
 
                 _tray = new TrayIconHost(
                     _host.Services.GetRequiredService<ISessionEngine>(),
+                    _host.Services.GetRequiredService<FocusAssistant.Privacy.PauseController>(),
                     showWindow: ShowMainWindow,
                     exit: ExitApplication);
                 _tray.Initialize();

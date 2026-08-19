@@ -1,4 +1,4 @@
-using System;
+using FocusAssistant.Core.Privacy;
 
 namespace FocusAssistant.Configuration
 {
@@ -7,7 +7,7 @@ namespace FocusAssistant.Configuration
     {
         public const string SectionName = "Privacy";
 
-        /// <summary>Days of per-application detail to keep. Daily aggregates outlive this.</summary>
+        /// <summary>Days of per-application detail to keep. Session-level aggregates outlive this.</summary>
         public int RetentionDays { get; set; } = 90;
 
         /// <summary>
@@ -22,21 +22,15 @@ namespace FocusAssistant.Configuration
         /// nothing else - password managers and banking sites have no business in a
         /// productivity log.
         /// </summary>
-        public string[] ExcludedProcesses { get; set; } =
-        [
-            "1Password", "Bitwarden", "KeePass", "KeePassXC", "Dashlane", "LastPass",
-        ];
-    }
-
-    public enum TitleCaptureMode
-    {
-        /// <summary>Store the title verbatim.</summary>
-        Full,
-
-        /// <summary>Store only the application name.</summary>
-        AppOnly,
-
-        /// <summary>Store the classifier's category and a hash, never the text.</summary>
-        Redacted,
+        /// <remarks>
+        /// Defaults to empty here, not to the actual default list, because
+        /// Microsoft.Extensions.Configuration's array binding appends config values onto
+        /// whatever the property already holds rather than replacing it - a property
+        /// initialised with six names plus six more from appsettings.json produces twelve,
+        /// six of them duplicates. The real defaults live in appsettings.json (already
+        /// checked in), which is also the file people actually edit; a C# fallback here
+        /// would just be a second place for the two to quietly disagree.
+        /// </remarks>
+        public string[] ExcludedProcesses { get; set; } = [];
     }
 }

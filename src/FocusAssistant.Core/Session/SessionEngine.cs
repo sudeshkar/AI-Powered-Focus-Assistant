@@ -1,6 +1,7 @@
 using FocusAssistant.Core.Data.Abstractions;
 using Microsoft.Extensions.Logging;
 using FocusAssistant.Core.Focus;
+using FocusAssistant.Core.Privacy;
 using FocusAssistant.Core.Models;
 using FocusAssistant.Core.Monitoring;
 using System;
@@ -47,6 +48,7 @@ namespace FocusAssistant.Core.Session
         private readonly IIdleMonitor _idleMonitor;
         private readonly IProductivityStrategy _productivityStrategy;
         private readonly IActivityClassifier _classifier;
+        private readonly IActivityPrivacyFilter _privacyFilter;
         private readonly ILogger<SessionEngine> _logger;
 
         /// <summary>
@@ -115,6 +117,7 @@ namespace FocusAssistant.Core.Session
             IIdleMonitor idleMonitor,
             IProductivityStrategy productivityStrategy,
             IActivityClassifier classifier,
+            IActivityPrivacyFilter privacyFilter,
             ILogger<SessionEngine> logger)
         {
             _userSessions = userSessions ?? throw new ArgumentNullException(nameof(userSessions));
@@ -124,6 +127,7 @@ namespace FocusAssistant.Core.Session
             _idleMonitor = idleMonitor ?? throw new ArgumentNullException(nameof(idleMonitor));
             _productivityStrategy = productivityStrategy ?? throw new ArgumentNullException(nameof(productivityStrategy));
             _classifier = classifier ?? throw new ArgumentNullException(nameof(classifier));
+            _privacyFilter = privacyFilter ?? throw new ArgumentNullException(nameof(privacyFilter));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
             _windowMonitor.WindowChanged += OnWindowChanged;
@@ -398,19 +402,45 @@ namespace FocusAssistant.Core.Session
             if (_currentWorkSession is null)
                 return;
 
+            var category = _productivityStrategy.GetCategory(appName);
+
+            // Applied before anything else touches the raw title: classification, the
+            // activity log, and the database all see only what the filter decided to keep.
+            // There is exactly one place activity becomes an AppUsage row, so there only
+            // needs to be one enforcement point.
+            var decision = _privacyFilter.Apply(appName, windowTitle, category);
+
+            if (decision.IsExcluded)
+            {
+                _currentAppUsage = new AppUsage
+                {
+                    wID = _currentWorkSession.wID,
+                    AppName = decision.AppName,
+                    WindowTitle = string.Empty,
+                    StartTime = startTime,
+                    // Excluded activity is not judged - a password manager is not
+                    // "distracting", it is simply none of this app's business.
+                    IsProductive = true,
+                };
+                return;
+            }
+
             _currentAppUsage = new AppUsage
             {
                 wID = _currentWorkSession.wID,
-                AppName = appName,
-                WindowTitle = windowTitle ?? string.Empty,
+                AppName = decision.AppName,
+                WindowTitle = decision.WindowTitle ?? string.Empty,
                 StartTime = startTime,
+                // Classification still runs on the real title, even when a redacted title is
+                // what gets stored - the classifier needs the real signal to be accurate, and
+                // only the persisted record is what privacy mode governs.
                 // ClassifyFast, never ClassifyAsync: this runs inside the session lock on
                 // the window-poll thread. The refinement service revisits the same activity
                 // off the hot path and lets the model correct this.
                 IsProductive = _classifier.ClassifyFast(new ActivityContext(
                     appName,
                     windowTitle,
-                    _productivityStrategy.GetCategory(appName),
+                    category,
                     startTime,
                     CurrentGoal)).IsProductive,
             };

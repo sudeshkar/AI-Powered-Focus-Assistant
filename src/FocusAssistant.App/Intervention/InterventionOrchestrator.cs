@@ -3,6 +3,7 @@ using FocusAssistant.Core.Focus;
 using FocusAssistant.Core.Intervention;
 using FocusAssistant.Core.Models;
 using FocusAssistant.Core.Monitoring;
+using FocusAssistant.Core.Privacy;
 using FocusAssistant.Core.Session;
 using FocusAssistant.Data.Stores;
 using FocusAssistant.Hosting;
@@ -44,6 +45,7 @@ namespace FocusAssistant.Intervention
         private readonly IInterventionPolicy _policy;
         private readonly IInterventionDispatcher _dispatcher;
         private readonly SqliteUserOverrideStore _overrides;
+        private readonly IActivityPrivacyFilter _privacyFilter;
         private readonly IBaseService<InterventionOutcome> _outcomes;
         private readonly StartupState _startupState;
         private readonly ILogger<InterventionOrchestrator> _logger;
@@ -61,6 +63,7 @@ namespace FocusAssistant.Intervention
             IInterventionPolicy policy,
             IInterventionDispatcher dispatcher,
             SqliteUserOverrideStore overrides,
+            IActivityPrivacyFilter privacyFilter,
             IBaseService<InterventionOutcome> outcomes,
             StartupState startupState,
             ILogger<InterventionOrchestrator> logger)
@@ -73,6 +76,7 @@ namespace FocusAssistant.Intervention
             _policy = policy ?? throw new ArgumentNullException(nameof(policy));
             _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
             _overrides = overrides ?? throw new ArgumentNullException(nameof(overrides));
+            _privacyFilter = privacyFilter ?? throw new ArgumentNullException(nameof(privacyFilter));
             _outcomes = outcomes ?? throw new ArgumentNullException(nameof(outcomes));
             _startupState = startupState ?? throw new ArgumentNullException(nameof(startupState));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -114,6 +118,11 @@ namespace FocusAssistant.Intervention
             {
                 var (appName, windowTitle) = _windowMonitor.GetActiveWindow();
                 if (string.IsNullOrEmpty(appName))
+                    return;
+
+                // A password manager or banking app is not a distraction to weigh in on -
+                // it is private, full stop. Checked before anything else touches the title.
+                if (_privacyFilter.Apply(appName, windowTitle, string.Empty).IsExcluded)
                     return;
 
                 var now = DateTimeOffset.Now;

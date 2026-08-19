@@ -74,11 +74,71 @@
 
             <Border Style="{StaticResource Card}">
                 <StackPanel>
+                    <TextBlock Text="Pause tracking" FontSize="16" FontWeight="SemiBold"/>
+                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Opacity="0.85"
+                               Text="Pausing stops the app from reading window titles at all - not just from saving them - until you resume or the timer runs out."/>
+
+                    <TextBlock Margin="0,12,0,0" Text="{Binding PauseStatusText}" FontWeight="SemiBold"/>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsPaused}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <ui:Button Content="Pause 30 minutes" Command="{Binding Pause30MinutesCommand}"/>
+                        <ui:Button Content="Pause 2 hours" Margin="8,0,0,0" Command="{Binding Pause2HoursCommand}"/>
+                        <ui:Button Content="Pause until tomorrow" Margin="8,0,0,0" Command="{Binding PauseUntilTomorrowCommand}"/>
+                    </StackPanel>
+
+                    <ui:Button Content="Resume tracking" Appearance="Primary" Margin="0,12,0,0"
+                               Command="{Binding ResumeTrackingCommand}">
+                        <ui:Button.Style>
+                            <Style TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsPaused}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ui:Button.Style>
+                    </ui:Button>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="Privacy" FontSize="16" FontWeight="SemiBold"/>
+                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Opacity="0.85" Text="{Binding RetentionSummary}"/>
+                    <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Opacity="0.85" Text="{Binding TitleCaptureSummary}"/>
+                    <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Opacity="0.85" Text="{Binding ExcludedProcessesSummary}"/>
+                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Opacity="0.55" FontSize="12" FontStyle="Italic"
+                               Text="Set in appsettings.json next to the app. An in-app editor for these is planned."/>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
                     <TextBlock Text="Your data" FontSize="16" FontWeight="SemiBold"/>
                     <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Opacity="0.85"
                                Text="Everything stays on this machine, in a database under your local app data. Window titles can include document names and page titles, so treat that file as personal."/>
-                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Opacity="0.6" FontStyle="Italic"
-                               Text="Retention limits, per-app exclusions, pause, and delete-my-data are coming next."/>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                        <ui:Button Content="Open data folder" Command="{Binding OpenDataFolderCommand}"/>
+                        <ui:Button Content="{Binding DeleteButtonLabel}"
+                                   Appearance="Danger" Margin="8,0,0,0"
+                                   Command="{Binding DeleteAllDataCommand}"/>
+                        <ui:Button Content="Cancel" Margin="8,0,0,0" Command="{Binding CancelDeleteCommand}"
+                                   Visibility="{Binding DeleteArmed, Converter={StaticResource BoolToVisibility}}"/>
+                    </StackPanel>
+
+                    <TextBlock Margin="0,10,0,0" Text="{Binding DataActionStatus}" Opacity="0.75" FontSize="12"/>
                 </StackPanel>
             </Border>
 

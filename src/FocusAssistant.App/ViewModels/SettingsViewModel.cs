@@ -1,7 +1,10 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FocusAssistant.Core.Intelligence;
+using FocusAssistant.Configuration;
 using FocusAssistant.Hosting;
+using FocusAssistant.Privacy;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using System;
 using System.IO;
@@ -24,6 +27,9 @@ namespace FocusAssistant.ViewModels
     {
         private readonly IModelProvisioner _provisioner;
         private readonly ILocalLanguageModel _model;
+        private readonly PauseController _pauseController;
+        private readonly DataManagementService _dataManagement;
+        private readonly IOptionsMonitor<PrivacyOptions> _privacyOptions;
         private readonly ILogger<SettingsViewModel> _logger;
 
         private CancellationTokenSource? _downloadCancellation;
@@ -58,6 +64,35 @@ namespace FocusAssistant.ViewModels
         [ObservableProperty]
         private bool _isTesting;
 
+        [ObservableProperty]
+        private bool _isPaused;
+
+        [ObservableProperty]
+        private string _pauseStatusText = string.Empty;
+
+        [ObservableProperty]
+        private string _retentionSummary = string.Empty;
+
+        [ObservableProperty]
+        private string _titleCaptureSummary = string.Empty;
+
+        [ObservableProperty]
+        private string _excludedProcessesSummary = string.Empty;
+
+        [ObservableProperty]
+        private string? _dataActionStatus;
+
+        /// <summary>
+        /// Requires one click to arm and a second to confirm, rather than a Yes/No dialog -
+        /// deleting everything is exactly the kind of action that should not be dismissible
+        /// with the same reflexive click that closes an unrelated popup.
+        /// </summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(DeleteButtonLabel))]
+        private bool _deleteArmed;
+
+        public string DeleteButtonLabel => DeleteArmed ? "Click again to confirm" : "Delete all tracked activity";
+
         public bool CanDownload => !IsDownloaded && !IsDownloading;
         public bool CanCancel => IsDownloading;
         public bool CanDelete => IsDownloaded && !IsDownloading;
@@ -65,15 +100,40 @@ namespace FocusAssistant.ViewModels
         public SettingsViewModel(
             IModelProvisioner provisioner,
             ILocalLanguageModel model,
+            PauseController pauseController,
+            DataManagementService dataManagement,
+            IOptionsMonitor<PrivacyOptions> privacyOptions,
             ILogger<SettingsViewModel> logger)
         {
             _provisioner = provisioner ?? throw new ArgumentNullException(nameof(provisioner));
             _model = model ?? throw new ArgumentNullException(nameof(model));
+            _pauseController = pauseController ?? throw new ArgumentNullException(nameof(pauseController));
+            _dataManagement = dataManagement ?? throw new ArgumentNullException(nameof(dataManagement));
+            _privacyOptions = privacyOptions ?? throw new ArgumentNullException(nameof(privacyOptions));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+            _pauseController.PropertyChanged += (_, _) => RefreshPauseState();
         }
 
         public void Refresh()
         {
+            RefreshPauseState();
+
+            var privacy = _privacyOptions.CurrentValue;
+            RetentionSummary = privacy.RetentionDays > 0
+                ? $"Per-app activity detail is kept for {privacy.RetentionDays} days, then removed. Daily totals are kept."
+                : "Activity detail is kept indefinitely.";
+            TitleCaptureSummary = privacy.TitleCapture switch
+            {
+                Core.Privacy.TitleCaptureMode.Full => "Window titles are recorded in full.",
+                Core.Privacy.TitleCaptureMode.AppOnly => "Only application names are recorded - window titles are never stored.",
+                Core.Privacy.TitleCaptureMode.Redacted => "Only the activity's category is recorded, never the window title text.",
+                _ => string.Empty,
+            };
+            ExcludedProcessesSummary = privacy.ExcludedProcesses.Length > 0
+                ? $"Never tracked in detail: {string.Join(", ", privacy.ExcludedProcesses)}."
+                : "No applications are excluded from tracking.";
+
             IsDownloaded = _provisioner.IsDownloaded;
             SizeText = $"{_provisioner.EstimatedBytes / (1024.0 * 1024 * 1024):F2} GB";
             StatusText = IsDownloaded ? "Installed and ready" : "Not installed";
@@ -147,6 +207,65 @@ namespace FocusAssistant.ViewModels
             await _provisioner.DeleteAsync();
             TestOutput = null;
             Refresh();
+        }
+
+        private void RefreshPauseState()
+        {
+            IsPaused = _pauseController.IsPaused;
+            PauseStatusText = _pauseController switch
+            {
+                { IsPaused: true, ResumesAt: { } resumesAt } => $"Paused until {resumesAt.LocalDateTime:t}",
+                { IsPaused: true } => "Paused",
+                _ => "Tracking is active",
+            };
+        }
+
+        [RelayCommand]
+        private Task Pause30MinutesAsync() => _pauseController.PauseAsync(TimeSpan.FromMinutes(30));
+
+        [RelayCommand]
+        private Task Pause2HoursAsync() => _pauseController.PauseAsync(TimeSpan.FromHours(2));
+
+        [RelayCommand]
+        private Task PauseUntilTomorrowAsync() => _pauseController.PauseUntilTomorrowAsync();
+
+        [RelayCommand]
+        private Task ResumeTrackingAsync() => _pauseController.ResumeAsync();
+
+        [RelayCommand]
+        private void OpenDataFolder() => _dataManagement.OpenDataFolder();
+
+        /// <summary>First click arms the button; the second, separate click actually deletes.</summary>
+        [RelayCommand]
+        private async Task DeleteAllDataAsync()
+        {
+            if (!DeleteArmed)
+            {
+                DeleteArmed = true;
+                DataActionStatus = "Click again to permanently delete all tracked activity.";
+                return;
+            }
+
+            DeleteArmed = false;
+            DataActionStatus = "Deleting...";
+
+            try
+            {
+                await _dataManagement.DeleteAllActivityAsync();
+                DataActionStatus = "All tracked activity has been deleted.";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Could not delete tracked activity");
+                DataActionStatus = $"Delete failed: {ex.Message}";
+            }
+        }
+
+        [RelayCommand]
+        private void CancelDelete()
+        {
+            DeleteArmed = false;
+            DataActionStatus = null;
         }
 
         /// <summary>

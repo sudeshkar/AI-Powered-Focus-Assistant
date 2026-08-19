@@ -18,6 +18,8 @@ using FocusAssistant.Platform.Startup;
 using FocusAssistant.Core.Intervention;
 using FocusAssistant.Data.Stores;
 using FocusAssistant.Intervention;
+using FocusAssistant.Core.Privacy;
+using FocusAssistant.Privacy;
 using FocusAssistant.ViewModels;
 using FocusAssistant.Views;
 using Microsoft.EntityFrameworkCore;
@@ -140,6 +142,9 @@ namespace FocusAssistant.Hosting
             services.AddSingleton<WindowTracker>();
             services.AddSingleton<IReportGenerator, DailyReportGenerator>();
 
+            services.AddSingleton<IActivityPrivacyFilter, ConfiguredPrivacyFilter>();
+            services.AddSingleton<DataManagementService>();
+
             // ---- Intervention pipeline ----
             services.AddSingleton<IWindowActivator, WindowsApiWindowActivator>();
             services.AddSingleton<IDistractionDetector, DistractionDetector>();
@@ -154,6 +159,8 @@ namespace FocusAssistant.Hosting
             services.AddHostedService<ClassificationRefinementService>();
             services.AddHostedService<SessionRecoveryService>();
             services.AddHostedService<TrackingHostedService>();
+            services.AddHostedService<RetentionHostedService>();
+            services.AddSingleton<FocusAssistant.Privacy.PauseController>();
             services.AddSingleton<IAutoStartService, AutoStartService>();
 
             // ---- Views and view models ----
