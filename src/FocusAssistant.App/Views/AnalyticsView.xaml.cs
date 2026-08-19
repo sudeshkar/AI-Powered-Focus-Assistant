@@ -5,7 +5,7 @@ using System.Windows.Controls;
 namespace FocusAssistant.Views
 {
     /// <summary>Daily analytics read from the local database.</summary>
-    public partial class AnalyticsView : UserControl
+    public partial class AnalyticsView : Page
     {
         // The view model is injected rather than built here from a resolved
         // IServiceProvider; the previous version new'd up both the service and the

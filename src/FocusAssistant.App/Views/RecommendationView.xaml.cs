@@ -5,7 +5,7 @@ using System.Windows.Controls;
 namespace FocusAssistant.Views
 {
     /// <summary>What the agent has learned, and its most recent suggestion.</summary>
-    public partial class RecommendationsView : UserControl
+    public partial class RecommendationsView : Page
     {
         private readonly RecommendationViewModel _viewModel;
 

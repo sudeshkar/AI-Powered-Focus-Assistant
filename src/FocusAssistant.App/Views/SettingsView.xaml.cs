@@ -5,7 +5,7 @@ using System.Windows.Controls;
 namespace FocusAssistant.Views
 {
     /// <summary>Settings: the on-device model, and what the app keeps.</summary>
-    public partial class SettingsView : UserControl
+    public partial class SettingsView : Page
     {
         private readonly SettingsViewModel _viewModel;
 

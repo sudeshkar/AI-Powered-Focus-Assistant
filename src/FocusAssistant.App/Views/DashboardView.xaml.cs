@@ -5,7 +5,7 @@ using System.Windows.Controls;
 namespace FocusAssistant.Views
 {
     /// <summary>Summary of today's activity.</summary>
-    public partial class DashboardView : UserControl
+    public partial class DashboardView : Page
     {
         private readonly DashboardViewModel _viewModel;
 

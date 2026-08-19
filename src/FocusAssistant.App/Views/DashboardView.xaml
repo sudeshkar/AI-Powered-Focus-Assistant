@@ -1,4 +1,4 @@
-<UserControl x:Class="FocusAssistant.Views.DashboardView"
+<Page x:Class="FocusAssistant.Views.DashboardView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -6,7 +6,7 @@
              mc:Ignorable="d"
              d:DesignHeight="600" d:DesignWidth="900">
 
-    <UserControl.Resources>
+    <Page.Resources>
         <Style x:Key="MetricCard" TargetType="Border">
             <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}"/>
             <Setter Property="CornerRadius" Value="8"/>
@@ -22,7 +22,7 @@
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="0,4,0,0"/>
         </Style>
-    </UserControl.Resources>
+    </Page.Resources>
 
     <StackPanel Margin="8">
         <TextBlock Text="Dashboard" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,16"/>
@@ -77,4 +77,4 @@
             </StackPanel>
         </Border>
     </StackPanel>
-</UserControl>
+</Page>
