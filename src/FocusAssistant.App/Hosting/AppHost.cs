@@ -15,6 +15,9 @@ using FocusAssistant.Core.Intelligence;
 using System.Net.Http;
 using FocusAssistant.Platform.Monitoring;
 using FocusAssistant.Platform.Startup;
+using FocusAssistant.Core.Intervention;
+using FocusAssistant.Data.Stores;
+using FocusAssistant.Intervention;
 using FocusAssistant.ViewModels;
 using FocusAssistant.Views;
 using Microsoft.EntityFrameworkCore;
@@ -112,9 +115,10 @@ namespace FocusAssistant.Hosting
             services.AddSingleton<IProductivityStrategy>(sp => sp.GetRequiredService<RuleBasedProductivityStrategy>());
             services.AddSingleton<IRuleMatcher>(sp => sp.GetRequiredService<RuleBasedProductivityStrategy>());
 
-            // Until the "This is work" button exists there is nothing to store, but the
-            // layer is registered so the classifier is written the same way either way.
-            services.AddSingleton<IUserOverrideStore, NoUserOverrideStore>();
+            // Backed by SQLite and cached in memory; see SqliteUserOverrideStore for why
+            // the hot-path Match() never touches the database.
+            services.AddSingleton<SqliteUserOverrideStore>();
+            services.AddSingleton<IUserOverrideStore>(sp => sp.GetRequiredService<SqliteUserOverrideStore>());
 
             // The generator itself is a registration so its lifetime and disposal are the
             // container's problem, not something two factory lambdas have to coordinate.
@@ -135,6 +139,13 @@ namespace FocusAssistant.Hosting
             services.AddSingleton<ISessionEngine, SessionEngine>();
             services.AddSingleton<WindowTracker>();
             services.AddSingleton<IReportGenerator, DailyReportGenerator>();
+
+            // ---- Intervention pipeline ----
+            services.AddSingleton<IWindowActivator, WindowsApiWindowActivator>();
+            services.AddSingleton<IDistractionDetector, DistractionDetector>();
+            services.AddSingleton<IInterventionPolicy, InterventionPolicy>();
+            services.AddSingleton<IInterventionDispatcher, NudgeDispatcher>();
+            services.AddHostedService<InterventionOrchestrator>();
 
             // ---- Startup ----
             services.AddSingleton<StartupState>();

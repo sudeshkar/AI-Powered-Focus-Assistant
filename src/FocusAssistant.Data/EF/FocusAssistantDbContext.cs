@@ -10,6 +10,8 @@ namespace FocusAssistant.Data.EF
         public DbSet<UserSession> UserSessions { get; set; } = null!;
         public DbSet<WorkSession> WorkSessions { get; set; } = null!;
         public DbSet<AppUsage> AppUsages { get; set; } = null!;
+        public DbSet<InterventionOutcome> InterventionOutcomes { get; set; } = null!;
+        public DbSet<UserOverride> UserOverrides { get; set; } = null!;
 
         public FocusAssistantDbContext(DbContextOptions<FocusAssistantDbContext> options)
             : base(options)
@@ -73,6 +75,13 @@ namespace FocusAssistant.Data.EF
             modelBuilder.Entity<AppUsage>().HasIndex(a => a.wID);
             modelBuilder.Entity<WorkSession>().HasIndex(w => w.StartTime);
             modelBuilder.Entity<UserSession>().HasIndex(u => u.StartTime);
+
+            modelBuilder.Entity<InterventionOutcome>().HasKey(i => i.iID);
+            modelBuilder.Entity<InterventionOutcome>().HasIndex(i => i.wID);
+            modelBuilder.Entity<InterventionOutcome>().HasIndex(i => i.ShownAt);
+
+            modelBuilder.Entity<UserOverride>().HasKey(o => o.oID);
+            modelBuilder.Entity<UserOverride>().HasIndex(o => o.AppName).IsUnique();
 
             base.OnModelCreating(modelBuilder);
         }

@@ -102,6 +102,11 @@ namespace FocusAssistant.Core.Session
 
         public string? CurrentGoal { get; private set; }
 
+        public string? CurrentWorkSessionId
+        {
+            get { lock (_sessionLock) return _currentWorkSession?.wID; }
+        }
+
         public SessionEngine(
             IBaseService<UserSession> userSessions,
             IBaseService<WorkSession> workSessions,

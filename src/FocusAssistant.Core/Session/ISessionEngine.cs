@@ -23,6 +23,9 @@ namespace FocusAssistant.Core.Session
         /// <summary>Optional statement of intent for the session (e.g. "write the methods section").</summary>
         string? CurrentGoal { get; }
 
+        /// <summary>The active work session's id, for tagging records that belong to it. Null when no session is active.</summary>
+        string? CurrentWorkSessionId { get; }
+
         Task StartSessionAsync(string? goal = null);
         Task EndSessionAsync();
 

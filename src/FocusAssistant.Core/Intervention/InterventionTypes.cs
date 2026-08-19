@@ -29,7 +29,7 @@ namespace FocusAssistant.Core.Intervention
     /// and <see cref="Focus.InterventionPolicy"/> (Phase 4). Replaces the old
     /// backend-sourced ActivityResponse — everything here is computed on-device.
     /// </summary>
-    public class InterventionSuggestion
+    public sealed record InterventionSuggestion
     {
         public required string Message { get; init; }
         public InterventionTier Tier { get; init; } = InterventionTier.Toast;
@@ -38,5 +38,17 @@ namespace FocusAssistant.Core.Intervention
         public double DistractionRisk { get; init; }
 
         public string? ActionTaken { get; init; }
+
+        /// <summary>The application this nudge was triggered by - what "This is work" applies to.</summary>
+        public required string AppName { get; init; }
+
+        /// <summary>Why the policy decided to speak, shown nowhere but logged for Insights.</summary>
+        public string? Rationale { get; init; }
+
+        /// <summary>
+        /// The last productive application seen before this distracting stretch began -
+        /// what "Back to &lt;app&gt;" foregrounds. Null when nothing productive preceded it.
+        /// </summary>
+        public string? ReturnApp { get; init; }
     }
 }
