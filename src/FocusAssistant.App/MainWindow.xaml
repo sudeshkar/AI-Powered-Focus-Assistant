@@ -1,0 +1,73 @@
+<ui:FluentWindow x:Class="FocusAssistant.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:views="clr-namespace:FocusAssistant.Views"
+        mc:Ignorable="d"
+        Title="Focus Assistant" Height="700" Width="1100"
+        ExtendsContentIntoTitleBar="True"
+        WindowBackdropType="Mica"
+        WindowCornerPreference="Round"
+        Closing="Window_Closing">
+
+    <ui:FluentWindow.Resources>
+        <Style TargetType="ui:NavigationViewItem">
+            <Setter Property="FontSize" Value="14"/>
+        </Style>
+    </ui:FluentWindow.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="Focus Assistant"/>
+
+        <!-- Each item names the page it opens, and the window hands the control a service
+             provider so those pages are built by DI with their view models. The previous
+             version hosted a Frame in ContentOverlay and switched its content from a
+             SelectionChanged handler; ContentOverlay draws *over* the navigation content
+             rather than being it, and SelectedItem is only set once a real navigation has
+             happened - which, with no TargetPageType anywhere, it never had. Every click
+             read a null SelectedItem and did nothing. -->
+        <ui:NavigationView Grid.Row="1"
+                           x:Name="RootNavigation"
+                           IsBackButtonVisible="Collapsed"
+                           PaneDisplayMode="Left"
+                           OpenPaneLength="220"
+                           Loaded="RootNavigation_Loaded">
+
+            <ui:NavigationView.MenuItems>
+                <ui:NavigationViewItem Content="Today" TargetPageType="{x:Type views:TodayView}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="Home24"/>
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
+
+                <ui:NavigationViewItem Content="Tracking" TargetPageType="{x:Type views:TrackingView}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="Timer24"/>
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
+
+                <ui:NavigationViewItem Content="Insights" TargetPageType="{x:Type views:InsightsView}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="DataTrending24"/>
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
+            </ui:NavigationView.MenuItems>
+
+            <ui:NavigationView.FooterMenuItems>
+                <ui:NavigationViewItem Content="Settings" TargetPageType="{x:Type views:SettingsView}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="Settings24"/>
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
+            </ui:NavigationView.FooterMenuItems>
+
+        </ui:NavigationView>
+    </Grid>
+</ui:FluentWindow>

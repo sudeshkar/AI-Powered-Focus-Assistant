@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- windows-only: Win32 P/Invoke for window and idle monitoring. -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>false</UseWindowsForms>
+    <RootNamespace>FocusAssistant.Platform</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FocusAssistant.Core\FocusAssistant.Core.csproj" />
+  </ItemGroup>
+
+</Project>

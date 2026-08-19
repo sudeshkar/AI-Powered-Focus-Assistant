@@ -1,0 +1,26 @@
+using System;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
+namespace FocusAssistant.Core.Models
+{
+    /// <summary>A continuous stretch of time spent in one application.</summary>
+    public class AppUsage
+    {
+        [Key]
+        public int aID { get; set; }
+
+        public string wID { get; set; } = string.Empty;
+
+        [ForeignKey(nameof(wID))]
+        public WorkSession? WorkSession { get; set; }
+
+        public string AppName { get; set; } = string.Empty;
+        public string WindowTitle { get; set; } = string.Empty;
+
+        public DateTime StartTime { get; set; } = DateTime.Now;
+        public DateTime EndTime { get; set; }
+        public TimeSpan Duration { get; set; }
+        public bool IsProductive { get; set; }
+    }
+}

@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FocusAssistant.App/FocusAssistant.App.csproj" />
+    <Project Path="src/FocusAssistant.Core/FocusAssistant.Core.csproj" />
+    <Project Path="src/FocusAssistant.Data/FocusAssistant.Data.csproj" />
+    <Project Path="src/FocusAssistant.Intelligence/FocusAssistant.Intelligence.csproj" />
+    <Project Path="src/FocusAssistant.Platform/FocusAssistant.Platform.csproj" />
+  </Folder>
+</Solution>

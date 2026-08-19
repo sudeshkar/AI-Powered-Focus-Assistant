@@ -1,0 +1,120 @@
+using FocusAssistant.Core.Config;
+using System;
+using System.Collections.Concurrent;
+using System.Linq;
+
+namespace FocusAssistant.Core.Focus
+{
+    /// <summary>
+    /// Keyword-based productivity classifier. Explicitly productive applications always
+    /// count; explicitly distracting ones are rescued only when the window title looks
+    /// work-related; anything unrecognised is given the benefit of the doubt.
+    /// </summary>
+    /// <remarks>
+    /// Also implements <see cref="IRuleMatcher"/>, which is the form the layered classifier
+    /// consumes. The two entry points share one implementation: <see cref="Match"/> does the
+    /// keyword work and reports which of the four cases it hit, and
+    /// <see cref="IsProductive"/> collapses that to a bool exactly as it always did. The
+    /// collapse is the lossy step - it turns "never heard of this application" into
+    /// <c>true</c>, indistinguishable from a real match - which is why the layered
+    /// classifier calls <see cref="Match"/> and handles <see cref="RuleMatchKind.NoMatch"/>
+    /// itself.
+    /// </remarks>
+    public class RuleBasedProductivityStrategy : IProductivityStrategy, IRuleMatcher
+    {
+        // Window titles change constantly, so the productivity cache is keyed on
+        // app+title and must be bounded or it grows without limit for the process
+        // lifetime. Categories are keyed on app name alone and stay small.
+        private const int MaxProductivityCacheEntries = 2_000;
+
+        private readonly IAppCategorizationConfig _config;
+        private readonly ConcurrentDictionary<string, string> _categoryCache = new(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, bool> _productivityCache = new(StringComparer.OrdinalIgnoreCase);
+
+        public RuleBasedProductivityStrategy(IAppCategorizationConfig config)
+        {
+            _config = config ?? throw new ArgumentNullException(nameof(config));
+        }
+
+        public string GetCategory(string? appName)
+        {
+            if (string.IsNullOrWhiteSpace(appName))
+                return "Unknown";
+
+            return _categoryCache.GetOrAdd(appName, DetermineCategory);
+        }
+
+        public bool IsProductive(string? appName, string? windowTitle)
+        {
+            if (string.IsNullOrWhiteSpace(appName))
+                return false;
+
+            var cacheKey = $"{appName} {windowTitle}";
+            if (_productivityCache.TryGetValue(cacheKey, out var cached))
+                return cached;
+
+            // NoMatch collapses to true here - the historical "assume productive rather
+            // than punishing the user for tools the ruleset has not been taught about".
+            var result = Match(appName, windowTitle).Kind is
+                RuleMatchKind.ExplicitProductive or RuleMatchKind.TitleRescued or RuleMatchKind.NoMatch;
+
+            // Cheapest bounding that keeps the hot path lock-free: once full, stop
+            // caching rather than evicting. Misses just re-run the keyword scan.
+            if (_productivityCache.Count < MaxProductivityCacheEntries)
+                _productivityCache.TryAdd(cacheKey, result);
+
+            return result;
+        }
+
+        /// <summary>
+        /// Reports which keyword rule matched, without deciding what that means. This is
+        /// the whole of the ruleset's knowledge; everything else is interpretation.
+        /// </summary>
+        public RuleMatch Match(string? appName, string? windowTitle)
+        {
+            if (string.IsNullOrWhiteSpace(appName))
+                return new RuleMatch(RuleMatchKind.NoMatch, "Unknown");
+
+            if (MatchesAny(_config.ProductiveApps.Values.SelectMany(a => a), appName))
+                return new RuleMatch(RuleMatchKind.ExplicitProductive, GetCategory(appName));
+
+            if (MatchesAny(_config.DistractingApps.Values.SelectMany(a => a), appName))
+            {
+                return IsWorkRelatedContent(windowTitle)
+                    ? new RuleMatch(RuleMatchKind.TitleRescued, GetCategory(appName))
+                    : new RuleMatch(RuleMatchKind.ExplicitDistracting, GetCategory(appName));
+            }
+
+            return new RuleMatch(RuleMatchKind.NoMatch, "Other");
+        }
+
+        private string DetermineCategory(string appName)
+        {
+            foreach (var category in _config.ProductiveApps)
+            {
+                if (MatchesAny(category.Value, appName))
+                    return category.Key;
+            }
+
+            foreach (var category in _config.DistractingApps)
+            {
+                if (MatchesAny(category.Value, appName))
+                    return category.Key;
+            }
+
+            return "Other";
+        }
+
+        private bool IsWorkRelatedContent(string? windowTitle)
+        {
+            if (string.IsNullOrWhiteSpace(windowTitle))
+                return false;
+
+            return _config.WorkKeywords.Any(keyword =>
+                windowTitle.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static bool MatchesAny(System.Collections.Generic.IEnumerable<string> needles, string appName) =>
+            needles.Any(needle => appName.Contains(needle, StringComparison.OrdinalIgnoreCase));
+    }
+}

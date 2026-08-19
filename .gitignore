@@ -2,7 +2,6 @@
 .env
 .env.local
 .env.*.local
-!.env.example
 
 # ---- Visual Studio / Rider ----
 .vs/
@@ -23,24 +22,27 @@ artifacts/
 *.pdb
 *.cache
 
-# ---- Python ----
-__pycache__/
-*.py[cod]
-.venv/
-venv/
-env/
-.pytest_cache/
-.mypy_cache/
-
 # ---- Local application data ----
 *.db
 *.db-shm
 *.db-wal
 *.log
-# Anchored: an unanchored "Data/" also matched Services/Data/, which holds
-# the EF Core DbContext.
+# Anchored: an unanchored "Data/" also matched src/FocusAssistant.Data/, the
+# EF Core project.
 /Data/
 /Logs/
+
+# ---- Models ----
+# The MiniLM embedding model is small (~23MB) and IS committed - the classifier
+# is useless without it, so a fresh clone must build and run as-is. Everything
+# else under /models/ is ignored by default. Note the allowlist form: a bare
+# "/models/*.onnx" would not have matched a nested path, so committing the
+# model depended on an accident of glob semantics rather than intent.
+# The Phi-3.5 SLM is downloaded on first use into %LocalAppData%\FocusAssistant\Models
+# and never belongs in source control at all.
+/models/**
+!/models/minilm/
+!/models/minilm/*
 
 # ---- OS ----
 Thumbs.db
