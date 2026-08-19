@@ -44,7 +44,7 @@ namespace FocusAssistant
                 // build pages whose constructors take dependencies, and navigation fails on
                 // a missing parameterless constructor.
                 RootNavigation.SetServiceProvider(_serviceProvider);
-                RootNavigation.Navigate(typeof(DashboardView));
+                RootNavigation.Navigate(typeof(TodayView));
             }
             catch (Exception ex)
             {

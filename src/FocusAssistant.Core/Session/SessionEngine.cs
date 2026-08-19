@@ -73,6 +73,13 @@ namespace FocusAssistant.Core.Session
         private readonly CancellationTokenSource _shutdown = new();
         private readonly Task _writerTask;
 
+        // System.Threading.Channels' unbounded-channel reader does not implement Count at
+        // all - Reader.Count throws NotSupportedException unconditionally, regardless of
+        // how the channel was configured. This tracks the same thing by hand: incremented
+        // on enqueue, decremented once a batch is actually written, so
+        // DrainPendingWritesAsync has something it can poll.
+        private int _pendingWriteCount;
+
         private UserSession? _currentUserSession;
         private WorkSession? _currentWorkSession;
         private AppUsage? _currentAppUsage;
@@ -191,6 +198,14 @@ namespace FocusAssistant.Core.Session
                 // Losing a batch is bad but not worth stopping tracking over; the next one
                 // may well succeed, and the alternative is losing everything after it too.
                 _logger.LogError(ex, "Failed to persist {Count} app usage(s)", batch.Count);
+            }
+            finally
+            {
+                // Decremented whether or not the write succeeded: a failed batch is gone
+                // either way, and leaving the counter inflated would make
+                // DrainPendingWritesAsync wait out its whole timeout on rows that will
+                // never arrive.
+                Interlocked.Add(ref _pendingWriteCount, -batch.Count);
             }
         }
 
@@ -430,7 +445,8 @@ namespace FocusAssistant.Core.Session
             // Queued rather than written here: this runs under the session lock on the
             // window-poll thread, and a database round trip on that path would stall
             // tracking for as long as the disk took.
-            _pendingWrites.Writer.TryWrite(usage);
+            if (_pendingWrites.Writer.TryWrite(usage))
+                Interlocked.Increment(ref _pendingWriteCount);
 
             return usage;
         }
@@ -489,12 +505,12 @@ namespace FocusAssistant.Core.Session
         {
             var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
 
-            while (_pendingWrites.Reader.Count > 0 && DateTime.UtcNow < deadline)
+            while (Volatile.Read(ref _pendingWriteCount) > 0 && DateTime.UtcNow < deadline)
                 await Task.Delay(50).ConfigureAwait(false);
 
-            if (_pendingWrites.Reader.Count > 0)
-                _logger.LogWarning("{Count} app usage(s) still unwritten after draining",
-                    _pendingWrites.Reader.Count);
+            var remaining = Volatile.Read(ref _pendingWriteCount);
+            if (remaining > 0)
+                _logger.LogWarning("{Count} app usage(s) still unwritten after draining", remaining);
         }
 
         public void Dispose()

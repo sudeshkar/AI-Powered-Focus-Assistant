@@ -98,6 +98,7 @@ namespace FocusAssistant.Hosting
 
             services.AddSingleton(typeof(IBaseService<>), typeof(BaseService<>));
             services.AddSingleton<AnalyticsServiceSQL>();
+            services.AddSingleton<DayQueryService>();
 
             // ---- Configuration ----
             services.AddSingleton<IAppCategorizationConfig, AppCategorizationConfig>();
@@ -154,6 +155,8 @@ namespace FocusAssistant.Hosting
             services.AddSingleton<RecommendationsView>();
             services.AddTransient<DashboardViewModel>();
             services.AddTransient<DashboardView>();
+            services.AddTransient<TodayViewModel>();
+            services.AddTransient<TodayView>();
             services.AddTransient<SettingsViewModel>();
             services.AddTransient<SettingsView>();
         }

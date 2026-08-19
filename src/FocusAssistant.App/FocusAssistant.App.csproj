@@ -19,9 +19,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- UseWindowsForms adds System.Windows.Forms to the implicit usings, which then
-         collides with WPF on Application, MessageBox and SaveFileDialog throughout the
-         app. Only the tray icon needs WinForms, and it imports the namespace itself. -->
+    <!-- UseWindowsForms adds System.Drawing to the implicit usings (not
+         System.Windows.Forms, which needed no removal), which then collides with WPF's
+         System.Windows.Media/System.Windows across the app on Point, Brush, Color, Pen,
+         Size and FontFamily. Only the tray icon and its icon loading need System.Drawing,
+         and that file imports the namespace itself. -->
+    <Using Remove="System.Drawing" />
     <Using Remove="System.Windows.Forms" />
   </ItemGroup>
 

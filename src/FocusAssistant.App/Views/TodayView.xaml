@@ -1,0 +1,211 @@
+<Page x:Class="FocusAssistant.Views.TodayView"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      xmlns:controls="clr-namespace:FocusAssistant.Controls"
+      xmlns:conv="clr-namespace:FocusAssistant.Converters"
+      mc:Ignorable="d"
+      d:DesignHeight="800" d:DesignWidth="1000">
+
+    <Page.Resources>
+        <conv:TimelineStateToBrushConverter x:Key="StateToBrush"/>
+        <conv:MinutesToWidthConverter x:Key="MinutesToWidth"/>
+        <conv:ShareToWidthConverter x:Key="ShareToWidth"/>
+        <conv:ProductiveToBrushConverter x:Key="ProductiveToBrush"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="20"/>
+        </Style>
+
+        <Style x:Key="TileLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Opacity" Value="0.7"/>
+        </Style>
+
+        <Style x:Key="TileValue" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="24"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,2,0,0"/>
+        </Style>
+
+        <Style x:Key="SectionTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+        </Style>
+    </Page.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
+        <StackPanel Margin="8,8,8,24">
+
+            <!-- Heading -->
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="Today" FontSize="26" FontWeight="SemiBold"/>
+                <TextBlock Text="{Binding StreakDays, StringFormat={}{0}-day streak}"
+                           VerticalAlignment="Bottom" Margin="14,0,0,5" Opacity="0.6" FontSize="13"/>
+            </StackPanel>
+            <TextBlock Text="{Binding Headline}" Opacity="0.75" Margin="0,0,0,18" FontSize="14"/>
+
+            <!-- Hero: the score, and what it is made of -->
+            <Border Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <controls:FocusRing Grid.Column="0"
+                                        Width="150" Height="150"
+                                        Value="{Binding FocusScore}"
+                                        Caption="{Binding ScoreBand}"
+                                        HasData="{Binding HasData}"
+                                        TrackBrush="{DynamicResource ControlFillColorDefaultBrush}"
+                                        Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+
+                    <StackPanel Grid.Column="1" Margin="28,4,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="Focus score" Style="{StaticResource TileLabel}"/>
+                        <TextBlock Text="{Binding ScoreExplanation}" TextWrapping="Wrap"
+                                   Opacity="0.8" Margin="0,4,0,16" FontSize="13"/>
+
+                        <UniformGrid Rows="1" Columns="4">
+                            <StackPanel>
+                                <TextBlock Text="Focused" Style="{StaticResource TileLabel}"/>
+                                <TextBlock Text="{Binding FocusedTime}" Style="{StaticResource TileValue}"/>
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock Text="Distracted" Style="{StaticResource TileLabel}"/>
+                                <TextBlock Text="{Binding DistractedTime}" Style="{StaticResource TileValue}"/>
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock Text="Longest stretch" Style="{StaticResource TileLabel}"/>
+                                <TextBlock Text="{Binding LongestStretch}" Style="{StaticResource TileValue}"/>
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock Text="Switches" Style="{StaticResource TileLabel}"/>
+                                <TextBlock Text="{Binding AppSwitches}" Style="{StaticResource TileValue}"/>
+                            </StackPanel>
+                        </UniformGrid>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- The shape of the day -->
+            <Border Style="{StaticResource Card}" Margin="0,16,0,0">
+                <StackPanel>
+                    <TextBlock Text="Your day" Style="{StaticResource SectionTitle}"/>
+
+                    <Border CornerRadius="4" ClipToBounds="True" Height="46"
+                            Background="{DynamicResource ControlFillColorDefaultBrush}">
+                        <ItemsControl ItemsSource="{Binding Timeline}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Rectangle Height="46"
+                                               Width="{Binding Minutes, Converter={StaticResource MinutesToWidth}}"
+                                               Fill="{Binding State, Converter={StaticResource StateToBrush}}"
+                                               ToolTip="{Binding Start, StringFormat=HH:mm}"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+
+                    <Grid Margin="0,6,0,0">
+                        <TextBlock Text="6am" Opacity="0.55" FontSize="11" HorizontalAlignment="Left"/>
+                        <TextBlock Text="12pm" Opacity="0.55" FontSize="11" HorizontalAlignment="Left" Margin="290,0,0,0"/>
+                        <TextBlock Text="6pm" Opacity="0.55" FontSize="11" HorizontalAlignment="Left" Margin="615,0,0,0"/>
+                        <TextBlock Text="midnight" Opacity="0.55" FontSize="11" HorizontalAlignment="Left" Margin="930,0,0,0"/>
+                    </Grid>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <Rectangle Width="10" Height="10" RadiusX="2" RadiusY="2" Fill="#2EA043" VerticalAlignment="Center"/>
+                        <TextBlock Text="Focused" Margin="6,0,18,0" FontSize="12" Opacity="0.75"/>
+                        <Rectangle Width="10" Height="10" RadiusX="2" RadiusY="2" Fill="#C05B4A" VerticalAlignment="Center"/>
+                        <TextBlock Text="Distracted" Margin="6,0,18,0" FontSize="12" Opacity="0.75"/>
+                        <Rectangle Width="10" Height="10" RadiusX="2" RadiusY="2" Fill="#33808080" VerticalAlignment="Center"/>
+                        <TextBlock Text="Not tracked" Margin="6,0,0,0" FontSize="12" Opacity="0.75"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Where the time went, and the written read-out -->
+            <Grid Margin="0,16,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="Where the time went" Style="{StaticResource SectionTitle}"/>
+
+                        <ItemsControl ItemsSource="{Binding TopApps}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <Grid Grid.Row="0">
+                                            <TextBlock Text="{Binding Name}" FontSize="13" HorizontalAlignment="Left"/>
+                                            <TextBlock Text="{Binding Time}" FontSize="13" Opacity="0.65"
+                                                       HorizontalAlignment="Right"/>
+                                        </Grid>
+                                        <Rectangle Grid.Row="1" Height="6" RadiusX="3" RadiusY="3"
+                                                   Margin="0,4,0,0" HorizontalAlignment="Left"
+                                                   Width="{Binding Share, Converter={StaticResource ShareToWidth}, ConverterParameter=300}"
+                                                   Fill="{Binding IsProductive, Converter={StaticResource ProductiveToBrush}}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="Nothing tracked yet today."
+                                   Opacity="0.55" FontStyle="Italic" FontSize="13">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasData}" Value="False">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="2" Style="{StaticResource Card}">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,12">
+                            <TextBlock Text="Summary" Style="{StaticResource SectionTitle}" Margin="0"/>
+                            <ui:ProgressRing IsIndeterminate="True" Width="16" Height="16"
+                                             HorizontalAlignment="Right" VerticalAlignment="Center"
+                                             Visibility="{Binding IsWritingInsight, Converter={StaticResource BoolToVis}}"/>
+                        </Grid>
+
+                        <TextBlock Text="{Binding Insight}" TextWrapping="Wrap" LineHeight="21" FontSize="13"/>
+
+                        <TextBlock Margin="0,14,0,0" FontSize="12" Opacity="0.6" TextWrapping="Wrap"
+                                   Text="Install the optional on-device model in Settings for a written summary."
+                                   Visibility="{Binding CanEnableInsights, Converter={StaticResource BoolToVis}}"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+        </StackPanel>
+    </ScrollViewer>
+</Page>
